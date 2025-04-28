@@ -73,7 +73,7 @@ export default function Home() {
     }
   }, [isSuccess, data]);
 
-  console.log(lostPets);
+  // console.log(lostPets);
   if (isLoading)
     return <div className="text-center py-8">Loading lost pets...</div>;
   if (error)
