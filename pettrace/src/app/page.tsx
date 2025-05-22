@@ -30,7 +30,7 @@ interface Pet {
 }
 
 export default function Home() {
-  const CONTRACT_ADDRESS = "0x089eeB78cB2c4820C458759c77C43aea8ee2CF8c";
+  const CONTRACT_ADDRESS = "0x850388b814B69ec4Da3cB3ac7637768adf9A0B00";
   const [lostPets, setLostPets] = useState<Pet[]>([]);
 
   const { data, error, isLoading, isError, isSuccess } = useReadContract({
@@ -86,7 +86,6 @@ export default function Home() {
   return (
     <main className="p-4 md:p-8 bg-gray-50 min-h-screen">
       <HeroBanner />
-      <HelpSearchSection />
 
       {/* Lost Pets Section */}
       <section className="max-w-7xl mx-auto mt-12">
@@ -109,6 +108,7 @@ export default function Home() {
           </div>
         )}
       </section>
+      <HelpSearchSection />
     </main>
   );
 }

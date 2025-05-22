@@ -19,5 +19,10 @@ module.exports = {
       accounts: [process.env.PRIVATE_KEY],
       chainId: 44787,
     },
+    celo_mainnet: {
+      url: `https://forno.celo.org`,
+      accounts: [process.env.PRIVATE_KEY],
+      chainId: 42220,
+    },
   },
 };

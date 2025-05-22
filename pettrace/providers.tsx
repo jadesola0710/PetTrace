@@ -2,7 +2,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
 import { RainbowKitProvider } from "@rainbow-me/rainbowkit";
-import { mainnet, celoAlfajores } from "wagmi/chains";
+import { celo } from "wagmi/chains";
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
 import { http } from "wagmi";
 import "@rainbow-me/rainbowkit/styles.css";
@@ -10,9 +10,9 @@ import "@rainbow-me/rainbowkit/styles.css";
 const config = getDefaultConfig({
   appName: process.env.NEXT_PUBLIC_APP_NAME || "PetTrace",
   projectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || "",
-  chains: [celoAlfajores],
+  chains: [celo],
   transports: {
-    [celoAlfajores.id]: http(),
+    [celo.id]: http(),
   },
 });
 

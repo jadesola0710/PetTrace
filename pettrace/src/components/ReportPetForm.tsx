@@ -3,17 +3,18 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   useAccount,
-  useWriteContract,
   useWaitForTransactionReceipt,
+  useWalletClient,
 } from "wagmi";
-import { parseEther } from "viem";
-import { celo, celoAlfajores } from "wagmi/chains";
+import { encodeFunctionData, parseEther } from "viem";
+import { celo } from "wagmi/chains";
 import { toast } from "react-hot-toast";
 import PetTraceABI from "../../abi.json";
 import { erc20Abi } from "viem";
+import { getDataSuffix, submitReferral } from "@divvi/referral-sdk";
 
-const CONTRACT_ADDRESS = "0x089eeB78cB2c4820C458759c77C43aea8ee2CF8c";
-const CUSD_ADDRESS = "0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1";
+const CONTRACT_ADDRESS = "0x850388b814B69ec4Da3cB3ac7637768adf9A0B00";
+const CUSD_ADDRESS = "0x765DE816845861e75A25fCA122bb6898B8B1282a";
 
 interface PetFormData {
   name: string;
@@ -36,34 +37,14 @@ interface PetFormData {
 export default function ReportPetForm() {
   const router = useRouter();
   const { address, chainId } = useAccount();
+  const { data: walletClient } = useWalletClient();
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCorrectNetwork, setIsCorrectNetwork] = useState(false);
   const [approvalToastId, setApprovalToastId] = useState<string | null>(null);
   const [reportToastId, setReportToastId] = useState<string | null>(null);
-
-  // Approval hooks
-  const {
-    writeContract: writeApproval,
-    data: approvalHash,
-    isPending: isApproving,
-  } = useWriteContract();
-
-  // Report hooks
-  const {
-    writeContract: writeReport,
-    data: reportHash,
-    isPending: isReporting,
-  } = useWriteContract();
-
-  // Approval confirmation
-  const { isSuccess: isApprovalConfirmed } = useWaitForTransactionReceipt({
-    hash: approvalHash,
-  });
-
-  // Report confirmation
-  const { isSuccess: isReportConfirmed } = useWaitForTransactionReceipt({
-    hash: reportHash,
-  });
+  const [approvalHash, setApprovalHash] = useState<`0x${string}` | undefined>();
+  const [reportHash, setReportHash] = useState<`0x${string}` | undefined>();
 
   const [formData, setFormData] = useState<PetFormData>({
     name: "",
@@ -83,9 +64,18 @@ export default function ReportPetForm() {
     useCUSD: false,
   });
 
+  // Transaction confirmation hooks
+  const { isSuccess: isApprovalConfirmed } = useWaitForTransactionReceipt({
+    hash: approvalHash,
+  });
+
+  const { isSuccess: isReportConfirmed } = useWaitForTransactionReceipt({
+    hash: reportHash,
+  });
+
   // Check network
   useEffect(() => {
-    setIsCorrectNetwork(chainId === celo.id || chainId === celoAlfajores.id);
+    setIsCorrectNetwork(chainId === celo.id);
   }, [chainId]);
 
   const handleChange = (
@@ -154,8 +144,18 @@ export default function ReportPetForm() {
   };
 
   const approveCUSD = async (amount: string) => {
-    const amountInWei = parseEther(amount);
+    console.log("[APPROVAL] Starting cUSD approval", { amount });
+
+    if (!walletClient || !address) {
+      console.error("[APPROVAL ERROR] Wallet not connected");
+      toast.error("Wallet not connected");
+      return;
+    }
+
     try {
+      const amountInWei = parseEther(amount);
+      console.log("[APPROVAL] Amount in wei:", amountInWei.toString());
+
       if (approvalToastId) {
         toast.dismiss(approvalToastId);
       }
@@ -163,21 +163,43 @@ export default function ReportPetForm() {
       const toastId = toast.loading("Approving cUSD spending...");
       setApprovalToastId(toastId);
 
-      writeApproval({
-        address: CUSD_ADDRESS,
+      const approvalData = encodeFunctionData({
         abi: erc20Abi,
         functionName: "approve",
         args: [CONTRACT_ADDRESS, amountInWei],
       });
+
+      console.log("[APPROVAL] Encoded approval data:", approvalData);
+
+      console.log("[APPROVAL] Sending transaction...");
+      const hash = await walletClient.sendTransaction({
+        account: address,
+        to: CUSD_ADDRESS,
+        data: approvalData,
+      });
+
+      console.log("[APPROVAL] Transaction sent, hash:", hash);
+      setApprovalHash(hash as `0x${string}`);
+
+      return hash;
     } catch (error) {
-      console.error("Approval failed:", error);
+      console.error("[APPROVAL ERROR]", error);
       toast.error("Failed to approve cUSD spending");
       setApprovalToastId(null);
+      throw error;
     }
   };
 
   const reportPet = async () => {
+    console.log("[REPORT] Starting pet report");
+
     try {
+      if (!walletClient || !address) {
+        console.error("[REPORT ERROR] Wallet not connected");
+        toast.error("Wallet not connected");
+        return;
+      }
+
       if (reportToastId) {
         toast.dismiss(reportToastId);
       }
@@ -190,31 +212,72 @@ export default function ReportPetForm() {
         : formData.ethBounty;
       const bountyInWei = parseEther(bountyAmount);
 
-      const args = [
-        formData.name,
-        formData.breed,
-        formData.gender,
-        Number(formData.sizeCm),
-        Number(formData.ageMonths),
-        formData.dateTimeLost,
-        formData.description,
-        formData.imageUrl,
-        formData.lastSeenLocation,
-        formData.contactName,
-        formData.contactPhone,
-        formData.contactEmail,
-        formData.useCUSD ? bountyInWei.toString() : "0",
-      ];
+      console.log("[REPORT] Bounty:", {
+        amount: bountyAmount,
+        inWei: bountyInWei.toString(),
+        currency: formData.useCUSD ? "cUSD" : "CELO",
+      });
 
-      writeReport({
-        address: CONTRACT_ADDRESS,
+      console.log("[REPORT] Generating Divvi suffix...");
+      const divviSuffix = getDataSuffix({
+        consumer: "0x124D8fad33E0b9fe9F3e1E90D0fC0055aBE8cA8d",
+        providers: [
+          "0x0423189886d7966f0dd7e7d256898daeee625dca",
+          "0xc95876688026be9d6fa7a7c33328bd013effa2bb",
+          "0x5f0a55fad9424ac99429f635dfb9bf20c3360ab8",
+        ],
+      });
+      console.log("[REPORT] Divvi suffix:", divviSuffix);
+
+      console.log("[REPORT] Encoding function...");
+      const encodedFunction = encodeFunctionData({
         abi: PetTraceABI.abi,
         functionName: "postLostPet",
-        args: args,
+        args: [
+          formData.name,
+          formData.breed,
+          formData.gender,
+          Number(formData.sizeCm),
+          Number(formData.ageMonths),
+          formData.dateTimeLost,
+          formData.description,
+          formData.imageUrl,
+          formData.lastSeenLocation,
+          formData.contactName,
+          formData.contactPhone,
+          formData.contactEmail,
+          formData.useCUSD ? bountyInWei.toString() : "0",
+        ],
+      });
+      console.log("[REPORT] Encoded function:", encodedFunction);
+
+      const dataWithDivvi = (encodedFunction +
+        (divviSuffix.startsWith("0x")
+          ? divviSuffix.slice(2)
+          : divviSuffix)) as `0x${string}`;
+      console.log("[REPORT] Combined data with Divvi suffix:", dataWithDivvi);
+
+      console.log("[REPORT] Sending transaction...");
+      const hash = await walletClient.sendTransaction({
+        account: address,
+        to: CONTRACT_ADDRESS,
+        data: dataWithDivvi,
         value: formData.useCUSD ? BigInt(0) : bountyInWei,
       });
+      console.log("[REPORT] Transaction sent, hash:", hash);
+
+      setReportHash(hash as `0x${string}`);
+
+      console.log("[REPORT] Submitting to Divvi...");
+      await submitReferral({
+        txHash: hash,
+        chainId: chainId || 42220,
+      });
+      console.log("[REPORT] Successfully submitted to Divvi");
+
+      return hash;
     } catch (error) {
-      console.error("Error reporting pet:", error);
+      console.error("[REPORT ERROR]", error);
       toast.error("Failed to report pet");
       setReportToastId(null);
       throw error;
@@ -223,18 +286,27 @@ export default function ReportPetForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    console.log("[SUBMIT] Form submission started");
+
+    if (!validateForm()) {
+      console.log("[SUBMIT] Form validation failed");
+      return;
+    }
 
     setIsSubmitting(true);
+    console.log("[SUBMIT] isSubmitting set to true");
 
     try {
       if (formData.useCUSD) {
+        console.log("[SUBMIT] Using cUSD, starting approval flow");
         await approveCUSD(formData.cusdBounty);
         return;
       }
 
+      console.log("[SUBMIT] Using CELO, starting report flow");
       await reportPet();
     } catch (error) {
+      console.error("[SUBMIT ERROR]", error);
       toast.error("Failed to submit pet report");
       setIsSubmitting(false);
     }
@@ -243,26 +315,33 @@ export default function ReportPetForm() {
   // Handle approval confirmation
   useEffect(() => {
     if (isApprovalConfirmed && formData.useCUSD) {
-      // Dismiss the approval toast
+      console.log("[APPROVAL CONFIRMED] Proceeding to report pet");
+
       if (approvalToastId) {
         toast.dismiss(approvalToastId);
         setApprovalToastId(null);
       }
-      reportPet(); // Proceed to pet reporting after approval
+
+      const toastId = toast.loading("Reporting lost pet after approval...");
+      setReportToastId(toastId);
+
+      reportPet();
     }
   }, [isApprovalConfirmed, formData.useCUSD]);
 
   // Handle successful report
   useEffect(() => {
     if (isReportConfirmed) {
-      // Dismiss the report toast
+      console.log("[REPORT CONFIRMED] Transaction successful");
+
       if (reportToastId) {
         toast.dismiss(reportToastId);
         setReportToastId(null);
       }
 
       toast.success("Pet reported successfully!");
-      // Reset form
+
+      console.log("[REPORT CONFIRMED] Resetting form");
       setFormData({
         name: "",
         breed: "",
@@ -280,14 +359,15 @@ export default function ReportPetForm() {
         cusdBounty: "1",
         useCUSD: false,
       });
+
       setTimeout(() => {
+        console.log("[NAVIGATION] Redirecting to /view_reports");
         router.push("/view_reports");
       }, 1500);
-      // router.push("/view_reports");
     }
   }, [isReportConfirmed, router]);
 
-  const isLoading = isSubmitting || isApproving || isReporting;
+  const isLoading = isSubmitting || !!approvalHash || !!reportHash;
 
   return (
     <div className="max-w-xl mx-auto bg-white p-8 rounded-2xl shadow-lg border border-gray-100">

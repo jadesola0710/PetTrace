@@ -1,34 +1,88 @@
 import Image from "next/image";
 import Link from "next/link";
+import { FaShieldAlt, FaLock, FaUserShield } from "react-icons/fa";
 
 export default function HelpSearchSection() {
   return (
-    <section className="bg-white rounded-2xl shadow-md mt-6 p-6 md:p-10 flex flex-col md:flex-row items-center justify-between gap-6">
-      {/* Dog with umbrella image */}
-      <div className="flex-shrink-0">
-        <Image
-          src="/pet.png" // Place this image in /public folder
-          alt="Dog with umbrella"
-          width={150}
-          height={150}
-          className="object-contain"
-        />
-      </div>
+    <section className="bg-gradient-to-br from-white to-yellow-50 rounded-2xl border border-gray-100 shadow-sm mt-8 p-8">
+      <div className="flex flex-col md:flex-row items-center gap-8">
+        {/* Illustration */}
+        <div className="flex-shrink-0 relative w-48 h-48 md:w-56 md:h-56">
+          <Image
+            src="/pet.png"
+            alt="Protected pet illustration"
+            fill
+            className="object-contain"
+          />
+        </div>
 
-      {/* Text + CTA */}
-      <div className="text-center md:text-left flex-1">
-        <h2 className="text-xl md:text-2xl font-semibold text-gray-800">
-          Why Choose PetTrace? (Trust & Social Proof)
-        </h2>
-        <p className="text-gray-600 mt-2 text-sm md:text-base">
-          No central database to hack; only you control your pet’s data.
-        </p>
+        {/* Content */}
+        <div className="flex-1">
+          <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4">
+            Why PetTrace Stands Out
+          </h2>
 
-        <Link href="/report_page" passHref>
-          <button className="mt-4 inline-flex items-center bg-yellow-500 text-white text-sm font-semibold px-4 py-2 rounded-md hover:bg-yellow-600 transition">
-            Report a Lost Pet <span className="ml-2 text-lg">+</span>
-          </button>
-        </Link>
+          <div className="space-y-4 mb-6">
+            <div className="flex items-start gap-4">
+              <div className="mt-1 p-2 bg-yellow-100 rounded-full text-yellow-600">
+                <FaShieldAlt size={18} />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-800">
+                  Decentralized Security
+                </h3>
+                <p className="text-gray-600 text-sm md:text-base">
+                  No central database to hack - only you control your pet's
+                  sensitive data
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4">
+              <div className="mt-1 p-2 bg-yellow-100 rounded-full text-yellow-600">
+                <FaLock size={18} />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-800">
+                  Transparent Process
+                </h3>
+                <p className="text-gray-600 text-sm md:text-base">
+                  Every interaction is recorded on-chain for complete
+                  transparency
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4">
+              <div className="mt-1 p-2 bg-yellow-100 rounded-full text-yellow-600">
+                <FaUserShield size={18} />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-800">
+                  Community Powered
+                </h3>
+                <p className="text-gray-600 text-sm md:text-base">
+                  Network of pet lovers working together to reunite lost animals
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Link
+              href="/report_page"
+              className="bg-yellow-600 hover:bg-yellow-700 text-white px-5 py-3 rounded-xl font-medium text-center transition-colors shadow-sm"
+            >
+              Report Lost Pet
+            </Link>
+            <Link
+              href="/how-it-works"
+              className="border border-yellow-600 text-yellow-600 hover:bg-yellow-50 px-5 py-3 rounded-xl font-medium text-center transition-colors shadow-sm"
+            >
+              Learn How It Works
+            </Link>
+          </div>
+        </div>
       </div>
     </section>
   );

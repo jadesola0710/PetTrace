@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+/**
+ * @title IERC20 Interface
+ * @dev Standard ERC20 interface with required functions for token interactions
+ */
 interface IERC20 {
     function transfer(address to, uint256 amount) external returns (bool);
     function transferFrom(
@@ -15,15 +19,37 @@ interface IERC20 {
     ) external view returns (uint256);
 }
 
+/**
+ * @title PetTrace
+ * @dev A decentralized application for tracking lost pets and managing bounties on Celo network
+ * @notice Allows owners to post lost pets with bounties (CELO/cUSD) and finders to claim rewards
+ */
 contract PetTrace {
+    // Security state variables
+    bool private _locked;
+    address public admin;
+
+    // Constants
+    address public constant CUSD_ADDRESS =
+        0x765DE816845861e75A25fCA122bb6898B8B1282a;
+    uint256 public constant MAX_CELO_BOUNTY = 10 ether;
+    uint256 public constant MAX_CUSD_BOUNTY = 10000 * 1e18;
+    uint256 public constant BOUNTY_TIMEOUT = 90 days;
+
+    // Pet data storage
+    uint256 public nextPetId;
+    mapping(uint256 => Pet) public pets;
+    mapping(uint256 => uint256) public escrowedCUSD;
+    mapping(uint256 => uint256) public postTime;
+
     struct Pet {
         uint256 id;
         address payable owner;
         string name;
         string breed;
         string gender;
-        uint256 sizeCm;
-        uint256 ageMonths;
+        uint128 sizeCm;
+        uint128 ageMonths;
         string dateTimeLost;
         string description;
         string imageUrl;
@@ -31,28 +57,45 @@ contract PetTrace {
         string contactName;
         string contactPhone;
         string contactEmail;
-        uint256 ethBounty;
-        uint256 cusdBounty;
+        uint128 celoBounty;
+        uint128 cUSDBounty;
         bool isFound;
         bool ownerConfirmed;
         bool finderConfirmed;
         address finder;
     }
 
-    // Alfajores Testnet CUSD address
-    address public constant CUSD_ADDRESS =
-        0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1;
-    uint256 public nextPetId;
-    mapping(uint256 => Pet) public pets;
-    mapping(uint256 => uint256) public escrowedCUSD;
+    // Modifiers
+    modifier nonReentrant() {
+        require(!_locked, "ReentrancyGuard: reentrant call");
+        _locked = true;
+        _;
+        _locked = false;
+    }
 
+    modifier onlyPetOwner(uint256 petId) {
+        require(msg.sender == pets[petId].owner, "Not pet owner");
+        _;
+    }
+
+    modifier petExists(uint256 petId) {
+        require(petId < nextPetId, "Pet does not exist");
+        _;
+    }
+
+    modifier onlyAdmin() {
+        require(msg.sender == admin, "Not admin");
+        _;
+    }
+
+    // Events
     event PetPosted(uint256 indexed petId, address indexed owner);
     event PetFound(uint256 indexed petId, address indexed finder);
     event BountyClaimed(
         uint256 indexed petId,
         address indexed finder,
-        uint256 ethAmount,
-        uint256 cusdAmount
+        uint256 celoAmount,
+        uint256 cUSDAmount
     );
     event ConfirmationAdded(
         uint256 indexed petId,
@@ -62,16 +105,27 @@ contract PetTrace {
     event BountyRefunded(
         uint256 indexed petId,
         address indexed owner,
-        uint256 ethAmount,
-        uint256 cusdAmount
+        uint256 celoAmount,
+        uint256 cUSDAmount
     );
+    event AdminChanged(address indexed newAdmin);
 
+    constructor() {
+        admin = msg.sender;
+    }
+
+    // ==================== CORE FUNCTIONS ====================
+
+    /**
+     * @notice Post a lost pet with optional bounty
+     * @dev Creates new pet record and escrows bounty
+     */
     function postLostPet(
         string calldata name,
         string calldata breed,
         string calldata gender,
-        uint256 sizeCm,
-        uint256 ageMonths,
+        uint128 sizeCm,
+        uint128 ageMonths,
         string calldata dateTimeLost,
         string calldata description,
         string calldata imageUrl,
@@ -79,30 +133,40 @@ contract PetTrace {
         string calldata contactName,
         string calldata contactPhone,
         string calldata contactEmail,
-        uint256 cusdBounty
-    ) external payable {
-        require(
-            msg.value > 0 || cusdBounty > 0,
-            "Either ETH or CUSD bounty required"
-        );
-        require(bytes(name).length > 0, "Pet name required");
-        require(
-            bytes(lastSeenLocation).length > 0,
-            "Last seen location required"
-        );
+        uint128 cUSDBounty
+    ) external payable nonReentrant {
+        // Input validation
+        require(msg.value <= MAX_CELO_BOUNTY, "CELO bounty too large");
+        require(cUSDBounty <= MAX_CUSD_BOUNTY, "cUSD bounty too large");
+        require(msg.value > 0 || cUSDBounty > 0, "Bounty required");
 
-        if (cusdBounty > 0) {
+        _validateString(name, 2, 50, "Name");
+        _validateString(breed, 2, 50, "Breed");
+        _validateString(gender, 1, 10, "Gender");
+        _validateString(description, 10, 500, "Description");
+        _validateString(imageUrl, 10, 200, "Image URL");
+        _validateString(lastSeenLocation, 5, 200, "Location");
+        _validateString(contactName, 2, 100, "Contact name");
+        _validateString(contactPhone, 5, 20, "Contact phone");
+
+        require(sizeCm >= 10 && sizeCm <= 200, "Invalid size");
+        require(ageMonths >= 1 && ageMonths <= 240, "Invalid age");
+        require(_isValidEmail(contactEmail), "Invalid email");
+
+        // Handle cUSD transfer
+        if (cUSDBounty > 0) {
             require(
                 IERC20(CUSD_ADDRESS).transferFrom(
                     msg.sender,
                     address(this),
-                    cusdBounty
+                    cUSDBounty
                 ),
-                "CUSD transfer failed. Check approval and balance."
+                "cUSD transfer failed"
             );
-            escrowedCUSD[nextPetId] = cusdBounty;
+            escrowedCUSD[nextPetId] = cUSDBounty;
         }
 
+        // Create pet record
         pets[nextPetId] = Pet({
             id: nextPetId,
             owner: payable(msg.sender),
@@ -118,22 +182,26 @@ contract PetTrace {
             contactName: contactName,
             contactPhone: contactPhone,
             contactEmail: contactEmail,
-            ethBounty: msg.value,
-            cusdBounty: cusdBounty,
+            celoBounty: uint128(msg.value),
+            cUSDBounty: cUSDBounty,
             isFound: false,
             ownerConfirmed: false,
             finderConfirmed: false,
             finder: address(0)
         });
 
+        postTime[nextPetId] = block.timestamp;
         emit PetPosted(nextPetId, msg.sender);
         nextPetId++;
     }
 
-    function markAsFound(uint256 petId) external {
+    /**
+     * @notice Mark pet as found
+     * @dev Can be called by anyone except owner
+     */
+    function markAsFound(uint256 petId) external petExists(petId) nonReentrant {
         Pet storage pet = pets[petId];
         require(!pet.isFound, "Already found");
-        require(pet.owner != address(0), "Pet does not exist");
         require(msg.sender != pet.owner, "Owner cannot be finder");
 
         pet.finder = msg.sender;
@@ -147,11 +215,16 @@ contract PetTrace {
         emit ConfirmationAdded(petId, msg.sender, false);
     }
 
-    function confirmFoundByOwner(uint256 petId) external {
+    /**
+     * @notice Confirm found pet by owner
+     * @dev Completes finding process if finder also confirmed
+     */
+    function confirmFoundByOwner(
+        uint256 petId
+    ) external onlyPetOwner(petId) nonReentrant {
         Pet storage pet = pets[petId];
         require(!pet.isFound, "Already found");
-        require(msg.sender == pet.owner, "Only owner can confirm");
-        require(pet.finder != address(0), "No finder yet");
+        require(pet.finder != address(0), "No finder assigned");
 
         pet.ownerConfirmed = true;
 
@@ -163,79 +236,192 @@ contract PetTrace {
         emit ConfirmationAdded(petId, msg.sender, true);
     }
 
-    function claimBounty(uint256 petId) external {
+    /**
+     * @notice Claim bounty for found pet
+     * @dev Can only be called by finder after confirmation
+     */
+    function claimBounty(uint256 petId) external petExists(petId) nonReentrant {
         Pet storage pet = pets[petId];
-        require(pet.isFound, "Pet not confirmed as found by both parties");
-        require(msg.sender == pet.finder, "Not the finder");
-        require(pet.ethBounty > 0 || pet.cusdBounty > 0, "No bounty to claim");
+        require(pet.isFound, "Pet not found");
+        require(msg.sender == pet.finder, "Not finder");
+        require(pet.celoBounty > 0 || pet.cUSDBounty > 0, "No bounty");
 
-        uint256 ethAmount = pet.ethBounty;
-        uint256 cusdAmount = pet.cusdBounty;
+        uint256 celoAmount = pet.celoBounty;
+        uint256 cUSDAmount = pet.cUSDBounty;
 
-        // Reset bounties
-        pet.ethBounty = 0;
-        pet.cusdBounty = 0;
+        // Reset state before transfers
+        pet.celoBounty = 0;
+        pet.cUSDBounty = 0;
         escrowedCUSD[petId] = 0;
 
-        // Transfer ETH bounty if exists
-        if (ethAmount > 0) {
-            payable(msg.sender).transfer(ethAmount);
+        // Transfer funds
+        if (celoAmount > 0) {
+            payable(msg.sender).transfer(celoAmount);
         }
-
-        // Transfer CUSD bounty if exists
-        if (cusdAmount > 0) {
+        if (cUSDAmount > 0) {
             require(
-                IERC20(CUSD_ADDRESS).transfer(msg.sender, cusdAmount),
-                "CUSD transfer failed"
+                IERC20(CUSD_ADDRESS).transfer(msg.sender, cUSDAmount),
+                "cUSD transfer failed"
             );
         }
 
-        emit BountyClaimed(petId, msg.sender, ethAmount, cusdAmount);
+        emit BountyClaimed(petId, msg.sender, celoAmount, cUSDAmount);
     }
 
-    function cancelAndRefund(uint256 petId) external {
+    /**
+     * @notice Cancel lost pet report and refund bounties
+     * @dev Can only be called by owner before finder assigned
+     */
+    function cancelAndRefund(
+        uint256 petId
+    ) external onlyPetOwner(petId) nonReentrant {
         Pet storage pet = pets[petId];
-        require(msg.sender == pet.owner, "Only owner can cancel");
         require(!pet.isFound, "Pet already found");
         require(pet.finder == address(0), "Finder already assigned");
 
-        uint256 ethAmount = pet.ethBounty;
-        uint256 cusdAmount = pet.cusdBounty;
+        uint256 celoAmount = pet.celoBounty;
+        uint256 cUSDAmount = pet.cUSDBounty;
 
-        // Reset bounties
-        pet.ethBounty = 0;
-        pet.cusdBounty = 0;
+        // Reset state
+        pet.celoBounty = 0;
+        pet.cUSDBounty = 0;
         escrowedCUSD[petId] = 0;
 
-        // Refund ETH bounty if exists
-        if (ethAmount > 0) {
-            payable(msg.sender).transfer(ethAmount);
+        // Refund funds
+        if (celoAmount > 0) {
+            payable(msg.sender).transfer(celoAmount);
         }
-
-        // Refund CUSD bounty if exists
-        if (cusdAmount > 0) {
+        if (cUSDAmount > 0) {
             require(
-                IERC20(CUSD_ADDRESS).transfer(msg.sender, cusdAmount),
-                "CUSD refund failed"
+                IERC20(CUSD_ADDRESS).transfer(msg.sender, cUSDAmount),
+                "cUSD refund failed"
             );
         }
 
-        emit BountyRefunded(petId, msg.sender, ethAmount, cusdAmount);
+        emit BountyRefunded(petId, msg.sender, celoAmount, cUSDAmount);
     }
 
-    // Helper function to check CUSD balance in contract
-    function getEscrowedCUSDBalance(
+    // ==================== ADMIN FUNCTIONS ====================
+
+    /**
+     * @notice Transfer admin rights
+     * @param newAdmin Address of new admin
+     */
+    function transferAdmin(address newAdmin) external onlyAdmin {
+        require(newAdmin != address(0), "Invalid address");
+        admin = newAdmin;
+        emit AdminChanged(newAdmin);
+    }
+
+    /**
+     * @notice Emergency withdraw cUSD (admin only)
+     * @param to Address to send funds to
+     */
+    function emergencyWithdrawCUSD(address to) external onlyAdmin {
+        uint256 balance = IERC20(CUSD_ADDRESS).balanceOf(address(this));
+        require(IERC20(CUSD_ADDRESS).transfer(to, balance), "Transfer failed");
+    }
+
+    // ==================== VIEW FUNCTIONS ====================
+
+    /**
+     * @notice Get paginated list of lost pet IDs
+     * @param startIndex Starting index (0-based)
+     * @param maxCount Maximum number of IDs to return
+     * @return ids Array of pet IDs
+     * @return hasMore Whether more results exist
+     */
+    function getLostPetIds(
+        uint256 startIndex,
+        uint256 maxCount
+    ) public view returns (uint256[] memory ids, bool hasMore) {
+        uint256 totalLost = 0;
+        uint256 endIndex = startIndex + maxCount;
+        if (endIndex > nextPetId) endIndex = nextPetId;
+
+        // Count lost pets in range
+        for (uint256 i = startIndex; i < endIndex; i++) {
+            if (!pets[i].isFound) totalLost++;
+        }
+
+        // Initialize and populate array
+        ids = new uint256[](totalLost);
+        uint256 currentIndex = 0;
+
+        for (uint256 i = startIndex; i < endIndex; i++) {
+            if (!pets[i].isFound) {
+                ids[currentIndex] = i;
+                currentIndex++;
+            }
+        }
+
+        hasMore = endIndex < nextPetId;
+        return (ids, hasMore);
+    }
+
+    /**
+     * @notice Get full pet details
+     * @param petId ID of pet to retrieve
+     * @return All pet details in a tuple
+     */
+    function getPetDetails(
         uint256 petId
-    ) external view returns (uint256) {
-        return escrowedCUSD[petId];
+    )
+        public
+        view
+        petExists(petId)
+        returns (
+            uint256,
+            address,
+            string memory,
+            string memory,
+            string memory,
+            uint128,
+            uint128,
+            string memory,
+            string memory,
+            string memory,
+            string memory,
+            string memory,
+            string memory,
+            string memory,
+            uint128,
+            uint128,
+            bool,
+            bool,
+            bool,
+            address
+        )
+    {
+        Pet storage pet = pets[petId];
+        return (
+            pet.id,
+            pet.owner,
+            pet.name,
+            pet.breed,
+            pet.gender,
+            pet.sizeCm,
+            pet.ageMonths,
+            pet.dateTimeLost,
+            pet.description,
+            pet.imageUrl,
+            pet.lastSeenLocation,
+            pet.contactName,
+            pet.contactPhone,
+            pet.contactEmail,
+            pet.celoBounty,
+            pet.cUSDBounty,
+            pet.isFound,
+            pet.ownerConfirmed,
+            pet.finderConfirmed,
+            pet.finder
+        );
     }
 
-    // Helper function to check contract's CUSD balance
-    function getContractCUSDBalance() external view returns (uint256) {
-        return IERC20(CUSD_ADDRESS).balanceOf(address(this));
-    }
-
-    // Returns both the IDs and full Pet data of all lost pets
+    /**
+     * @notice Get all lost pets (caution: may hit gas limits)
+     * @return Two arrays: pet IDs and Pet structs
+     */
     function getAllLostPets()
         public
         view
@@ -243,37 +429,80 @@ contract PetTrace {
     {
         uint256 count = 0;
 
-        // First count how many pets are lost
+        // Count lost pets
         for (uint256 i = 0; i < nextPetId; i++) {
-            if (!pets[i].isFound) {
-                count++;
-            }
+            if (!pets[i].isFound) count++;
         }
 
         // Initialize arrays
-        uint256[] memory petIds = new uint256[](count);
+        uint256[] memory ids = new uint256[](count);
         Pet[] memory lostPets = new Pet[](count);
         uint256 index = 0;
 
         // Populate arrays
         for (uint256 i = 0; i < nextPetId; i++) {
             if (!pets[i].isFound) {
-                petIds[index] = i; // The pet ID (key in mapping)
+                ids[index] = i;
                 lostPets[index] = pets[i];
                 index++;
             }
         }
 
-        return (petIds, lostPets);
+        return (ids, lostPets);
     }
 
-    function getLostPetsCount() external view returns (uint256) {
+    /**
+     * @notice Get count of lost pets
+     * @return Number of pets not found
+     */
+    function getLostPetsCount() public view returns (uint256) {
         uint256 counter = 0;
         for (uint256 i = 0; i < nextPetId; i++) {
-            if (!pets[i].isFound) {
-                counter++;
-            }
+            if (!pets[i].isFound) counter++;
         }
         return counter;
+    }
+
+    // ==================== INTERNAL HELPERS ====================
+
+    function _validateString(
+        string calldata str,
+        uint min,
+        uint max,
+        string memory field
+    ) internal pure {
+        bytes memory b = bytes(str);
+        require(
+            b.length >= min && b.length <= max,
+            string(abi.encodePacked(field, " length invalid"))
+        );
+        require(
+            !_isBlank(b),
+            string(abi.encodePacked(field, " cannot be blank"))
+        );
+    }
+
+    function _isBlank(bytes memory b) internal pure returns (bool) {
+        for (uint i = 0; i < b.length; i++) {
+            if (b[i] != " ") return false;
+        }
+        return true;
+    }
+
+    function _isValidEmail(string memory email) internal pure returns (bool) {
+        bytes memory b = bytes(email);
+        if (b.length < 5) return false;
+
+        bool hasAt = false;
+        bool hasDotAfterAt = false;
+        for (uint i = 0; i < b.length; i++) {
+            if (b[i] == "@") {
+                if (hasAt) return false;
+                hasAt = true;
+            } else if (hasAt && b[i] == ".") {
+                hasDotAfterAt = true;
+            }
+        }
+        return hasAt && hasDotAfterAt;
     }
 }

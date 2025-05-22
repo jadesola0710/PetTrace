@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 
 interface Pet {
   id: number;
@@ -68,7 +69,7 @@ export default function PetCard({ pet }: { pet: Pet }) {
         </div>
         <div className="flex justify-between items-center mt-2">
           <button className="text-xs bg-white/20 px-2 py-1 rounded hover:bg-white/30">
-            View Details
+            <Link href={`/view_pet_details/${pet.id}`}>View Details</Link>
           </button>
         </div>
       </div>
