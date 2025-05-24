@@ -4,19 +4,19 @@
 
 ---
 
-### 🔗 [Live Demo](https://your-demo-link.vercel.app/)
+### 🔗 [Live Demo](https://pet-trace-jadesola0710s-projects.vercel.app/)
 
-### 💻 [GitHub Repository](https://github.com/your-username/pettrace)
+### 💻 [GitHub Repository](https://github.com/jadesola0710/PetTrace)
 
 ---
 
 ## **Features**
 
 - 🐾 **Lost Pet Posting** – Users can register lost pets with images, descriptions, and last known locations.
-- 🎯 **Bounty System** – Attach a bounty in CELO to encourage community help.
+- 🎯 **Bounty System** – Attach a bounty in CELO or cUSD to encourage community help.
 - ✅ **Recovery Confirmation** – Mark pets as found and release bounties securely via smart contracts.
 - 🔐 **Owner Contact Info** – Easily contact pet owners with name, phone, and email details.
-- 🌍 **Celo Integration** – Built on Celo Alfajores testnet for low-cost and fast transactions.
+- 🌍 **Celo Integration** – Built on Celo mainnet for low-cost and fast transactions.
 
 ---
 
@@ -90,7 +90,7 @@ yarn hardhat compile
 ### 🚀 Deploy the Smart Contract
 
 ```sh
-npx hardhat ignition deploy ./ignition/modules/PetTrace.js --network celo_alfajores
+npx hardhat ignition deploy ./ignition/modules/PetTrace.js --network celo_mainnet
 ```
 
 ### 🖥️ Start the Frontend
@@ -104,13 +104,11 @@ pnpm run dev
 
 ## **Smart Contract Deployment**
 
-Deployed to **Celo Alfajores** Testnet:
+Deployed to **Celo mainnet**:
 
-| Contract | Address                                      |
+| Contract | Address (Mainnet)                            |
 | -------- | -------------------------------------------- |
-| PetTrace | `0x089eeB78cB2c4820C458759c77C43aea8ee2CF8c` |
-
----
+| PetTrace | `0x850388b814B69ec4Da3cB3ac7637768adf9A0B00` |
 
 ---
 
@@ -128,7 +126,7 @@ Deployed to **Celo Alfajores** Testnet:
 
 - **Frontend:** Next.js + React + TypeScript
 - **Smart Contracts:** Solidity (Hardhat + Ignition)
-- **Blockchain:** Celo Alfajores Testnet
+- **Blockchain:** Celo mainnet
 - **Wallets:** MetaMask, Celo Extension Wallet, RainbowKit
 - **Storage:** Temporary URL-based images (no IPFS yet)
 
