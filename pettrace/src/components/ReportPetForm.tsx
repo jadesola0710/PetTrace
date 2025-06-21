@@ -12,6 +12,11 @@ import { toast } from "react-hot-toast";
 import PetTraceABI from "../../abi.json";
 import { erc20Abi } from "viem";
 import { getDataSuffix, submitReferral } from "@divvi/referral-sdk";
+import SelfQRcodeWrapper, {
+  SelfAppBuilder,
+  type SelfApp,
+} from "@selfxyz/qrcode";
+import { v4 as uuidv4 } from "uuid";
 
 const CONTRACT_ADDRESS = "0x850388b814B69ec4Da3cB3ac7637768adf9A0B00";
 const CUSD_ADDRESS = "0x765DE816845861e75A25fCA122bb6898B8B1282a";
@@ -45,6 +50,10 @@ export default function ReportPetForm() {
   const [reportToastId, setReportToastId] = useState<string | null>(null);
   const [approvalHash, setApprovalHash] = useState<`0x${string}` | undefined>();
   const [reportHash, setReportHash] = useState<`0x${string}` | undefined>();
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+  const [selfApp, setSelfApp] = useState<SelfApp | null>(null);
+  const [isVerified, setIsVerified] = useState(false);
 
   const [formData, setFormData] = useState<PetFormData>({
     name: "",
@@ -77,6 +86,11 @@ export default function ReportPetForm() {
   useEffect(() => {
     setIsCorrectNetwork(chainId === celo.id);
   }, [chainId]);
+
+  // useEffect(() => {
+  //   // Generate a user ID when the component mounts
+  //   setUserId(uuidv4());
+  // }, []);
 
   const handleChange = (
     e: React.ChangeEvent<
@@ -369,9 +383,74 @@ export default function ReportPetForm() {
 
   const isLoading = isSubmitting || !!approvalHash || !!reportHash;
 
+  const url = process.env.NEXT_PUBLIC_SELF_ENDPOINT;
+
+  useEffect(() => {
+    if (!address) return;
+    try {
+      const userId = `${address}`;
+      const app = new SelfAppBuilder({
+        appName: "PetTrace",
+        scope: "pet-trace",
+        endpoint: `${url}/api/verify`,
+        userId,
+        userIdType: "hex",
+      }).build();
+
+      setSelfApp(app);
+    } catch (error) {
+      console.error("Failed to initialize Self app:", error);
+    }
+  }, [address]);
+
+  const displayToast = (message: string) => {
+    setToastMessage(message);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
+  };
+
+  const handleSuccessfulVerification = () => {
+    displayToast("Verification successful! You can now register.");
+    console.log(true);
+  };
+
   return (
     <div className="max-w-xl mx-auto bg-white p-8 rounded-2xl shadow-lg border border-gray-100">
       <h2 className="text-xl font-semibold mb-4">Report Lost Pet</h2>
+
+      {/* Verification Section */}
+      <div className="mb-8 p-4 border border-gray-200 rounded-lg">
+        <h3 className="text-lg font-medium mb-2">
+          Identity Verification Required
+        </h3>
+        <p className="text-sm text-gray-600 mb-4">
+          Scan this QR code with the Self app to verify your identity before
+          reporting
+        </p>
+
+        {selfApp ? (
+          <div className="flex justify-center">
+            <SelfQRcodeWrapper
+              selfApp={selfApp}
+              onSuccess={() => {
+                setIsVerified(true);
+                toast.success("Identity verified successfully!");
+              }}
+              size={150}
+            />
+          </div>
+        ) : (
+          <div className="w-[250px] h-[250px] mx-auto bg-gray-100 rounded-lg animate-pulse flex items-center justify-center">
+            <p>Loading verification...</p>
+          </div>
+        )}
+
+        {isVerified && (
+          <p className="text-green-500 text-sm mt-2 text-center">
+            ✓ Verification complete
+          </p>
+        )}
+      </div>
 
       <form className="space-y-6" onSubmit={handleSubmit}>
         <div className="grid grid-cols-2 gap-4">
@@ -594,7 +673,7 @@ export default function ReportPetForm() {
           </div>
         </div>
 
-        <button
+        {/* <button
           type="submit"
           disabled={isLoading}
           className={`w-full py-3 mt-4 rounded-xl font-semibold transition ${
@@ -604,6 +683,21 @@ export default function ReportPetForm() {
           }`}
         >
           {isLoading ? "Processing..." : "Report Lost Pet"}
+        </button> */}
+        <button
+          type="submit"
+          disabled={isLoading || !isVerified}
+          className={`w-full py-3 mt-4 rounded-xl font-semibold transition ${
+            isLoading || !isVerified
+              ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+              : "bg-yellow-600 text-white hover:bg-yellow-700"
+          }`}
+        >
+          {isLoading
+            ? "Processing..."
+            : !isVerified
+            ? "Complete Verification First"
+            : "Report Lost Pet"}
         </button>
       </form>
     </div>
