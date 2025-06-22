@@ -16,7 +16,6 @@ import SelfQRcodeWrapper, {
   SelfAppBuilder,
   type SelfApp,
 } from "@selfxyz/qrcode";
-import { v4 as uuidv4 } from "uuid";
 
 const CONTRACT_ADDRESS = "0x850388b814B69ec4Da3cB3ac7637768adf9A0B00";
 const CUSD_ADDRESS = "0x765DE816845861e75A25fCA122bb6898B8B1282a";
@@ -86,11 +85,6 @@ export default function ReportPetForm() {
   useEffect(() => {
     setIsCorrectNetwork(chainId === celo.id);
   }, [chainId]);
-
-  // useEffect(() => {
-  //   // Generate a user ID when the component mounts
-  //   setUserId(uuidv4());
-  // }, []);
 
   const handleChange = (
     e: React.ChangeEvent<

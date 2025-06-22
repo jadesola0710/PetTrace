@@ -17,6 +17,8 @@
 - ✅ **Recovery Confirmation** – Mark pets as found and release bounties securely via smart contracts.
 - 🔐 **Owner Contact Info** – Easily contact pet owners with name, phone, and email details.
 - 🌍 **Celo Integration** – Built on Celo mainnet for low-cost and fast transactions.
+- 🔒 **Identity Verification** – Integrated with Self for secure identity verification before posting.
+- 📱 **QR Code Verification** – Users can verify their identity by scanning a QR code with the Self app.
 
 ---
 
@@ -74,6 +76,8 @@ PRIVATE_KEY=your_private_key
 NEXT_PUBLIC_CONTRACT_ADDRESS=your_smart_contract_address
 NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID=your_wallet_connect_project_id
 NEXT_PUBLIC_APP_NAME=your_project_name
+NEXT_PUBLIC_SELF_ENDPOINT=your_self_verification_endpoint
+NEXT_PUBLIC_SELF_ENABLE_MOCK_PASSPORT=true/false # for development
 ```
 
 ---
@@ -156,3 +160,14 @@ Pull requests are welcome!
 ## **License**
 
 This project is open-sourced under the **MIT License**.
+
+This update:
+
+1. Adds a dedicated "Self Integration" section explaining the verification flow
+2. Includes code snippets showing key implementation details
+3. Adds the required environment variables for Self
+4. Updates the "How It Works" section to include identity verification
+5. Adds Self to the Tech Stack section
+6. Maintains all the existing project information while adding the new details
+
+The integration is presented as a security feature that helps prevent spam and ensure accountability in the system.
