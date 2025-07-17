@@ -1,6 +1,7 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import axios from "axios";
 import {
   useAccount,
   useWaitForTransactionReceipt,
@@ -28,7 +29,6 @@ interface PetFormData {
   ageMonths: string;
   dateTimeLost: string;
   description: string;
-  imageUrl: string;
   lastSeenLocation: string;
   contactName: string;
   contactPhone: string;
@@ -53,6 +53,10 @@ export default function ReportPetForm() {
   const [toastMessage, setToastMessage] = useState("");
   const [selfApp, setSelfApp] = useState<SelfApp | null>(null);
   const [isVerified, setIsVerified] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<PetFormData>({
     name: "",
@@ -62,7 +66,6 @@ export default function ReportPetForm() {
     ageMonths: "",
     dateTimeLost: "",
     description: "",
-    imageUrl: "",
     lastSeenLocation: "",
     contactName: "",
     contactPhone: "",
@@ -132,11 +135,6 @@ export default function ReportPetForm() {
       }
     }
 
-    if (!formData.imageUrl) {
-      toast.error("Please provide an image URL");
-      return false;
-    }
-
     const bounty = formData.useCUSD ? formData.cusdBounty : formData.ethBounty;
     if (isNaN(parseFloat(bounty))) {
       toast.error("Please enter a valid bounty amount");
@@ -198,6 +196,82 @@ export default function ReportPetForm() {
     }
   };
 
+  const handleFileChange = (
+    fileOrEvent: File | React.ChangeEvent<HTMLInputElement>
+  ) => {
+    setError(null);
+    let selectedFile: File | null = null;
+
+    if (fileOrEvent instanceof File) {
+      selectedFile = fileOrEvent;
+    } else if (fileOrEvent.target.files?.[0]) {
+      selectedFile = fileOrEvent.target.files[0];
+    }
+
+    if (!selectedFile) return;
+
+    // Rest of your validation logic...
+    if (!selectedFile.type.startsWith("image/")) {
+      setError("Only image files are allowed");
+      return;
+    }
+
+    if (selectedFile.size > 10 * 1024 * 1024) {
+      setError("File size must be less than 10MB");
+      return;
+    }
+
+    setFile(selectedFile);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = () => setPreview(reader.result as string);
+    reader.readAsDataURL(selectedFile);
+  };
+
+  const uploadToIPFS = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append(
+      "pinataMetadata",
+      JSON.stringify({ name: `pettrace-image-${Date.now()}` })
+    );
+
+    const response = await axios.post(
+      "https://api.pinata.cloud/pinning/pinFileToIPFS",
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+          Authorization: `Bearer ${process.env.NEXT_PUBLIC_PINATA_JWT}`,
+        },
+      }
+    );
+
+    if (response.status !== 200) {
+      throw new Error("Failed to upload image");
+    }
+
+    return `https://gateway.pinata.cloud/ipfs/${response.data.IpfsHash}`;
+  };
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        handleFileChange(e.dataTransfer.files[0]);
+      }
+    },
+    [handleFileChange]
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
   const reportPet = async () => {
     console.log("[REPORT] Starting pet report");
 
@@ -211,6 +285,16 @@ export default function ReportPetForm() {
       if (reportToastId) {
         toast.dismiss(reportToastId);
       }
+
+      const imageUrl = await uploadToIPFS(file!);
+      const ipfsHash = imageUrl.split("/").pop() || "";
+
+      // Validate URL length (matches contract MAX_URL_LENGTH = 200)
+      if (ipfsHash.length > 200) {
+        throw new Error("Image URL too long");
+      }
+
+      console.log("ipfsHash", ipfsHash);
 
       const toastId = toast.loading("Reporting lost pet...");
       setReportToastId(toastId);
@@ -249,7 +333,7 @@ export default function ReportPetForm() {
           Number(formData.ageMonths),
           formData.dateTimeLost,
           formData.description,
-          formData.imageUrl,
+          ipfsHash,
           formData.lastSeenLocation,
           formData.contactName,
           formData.contactPhone,
@@ -358,7 +442,6 @@ export default function ReportPetForm() {
         ageMonths: "",
         dateTimeLost: "",
         description: "",
-        imageUrl: "",
         lastSeenLocation: "",
         contactName: "",
         contactPhone: "",
@@ -401,11 +484,6 @@ export default function ReportPetForm() {
     setToastMessage(message);
     setShowToast(true);
     setTimeout(() => setShowToast(false), 3000);
-  };
-
-  const handleSuccessfulVerification = () => {
-    displayToast("Verification successful! You can now register.");
-    console.log(true);
   };
 
   return (
@@ -568,19 +646,74 @@ export default function ReportPetForm() {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Image URL*
+          <div className="mb-4">
+            <label className="block text-gray-700 font-medium text-sm mb-2">
+              Pet Image *
             </label>
-            <input
-              type="url"
-              name="imageUrl"
-              value={formData.imageUrl}
-              onChange={handleChange}
-              className="w-full p-3 border border-gray-300 rounded-xl focus:ring-1 focus:ring-yellow-300 focus:outline-none transition"
-              placeholder="https://example.com/pet.jpg"
-              required
-            />
+            <div
+              className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md"
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+            >
+              <div className="space-y-1 text-center">
+                <svg
+                  className="mx-auto h-12 w-12 text-gray-400"
+                  stroke="currentColor"
+                  fill="none"
+                  viewBox="0 0 48 48"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                <div className="flex justify-center text-sm text-gray-600">
+                  <label
+                    htmlFor="file-upload"
+                    className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none"
+                  >
+                    <span>Upload a file</span>
+                    <input
+                      id="file-upload"
+                      name="file-upload"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                      className="sr-only"
+                    />
+                  </label>
+                  <p className="pl-1">or drag and drop</p>
+                </div>
+                <p className="text-xs text-gray-500">
+                  PNG, JPG, GIF up to 10MB
+                </p>
+                {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
+              </div>
+            </div>
+
+            {/* Single Preview Section */}
+            {preview && (
+              <div className="mt-4">
+                <img
+                  src={preview}
+                  alt="Preview"
+                  className="max-w-full h-auto max-h-60 rounded-lg border border-gray-200"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPreview(null);
+                    setFile(null);
+                  }}
+                  className="mt-2 text-sm text-red-600 hover:text-red-500"
+                >
+                  Remove image
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -667,7 +800,7 @@ export default function ReportPetForm() {
           </div>
         </div>
 
-        {/* <button
+        <button
           type="submit"
           disabled={isLoading}
           className={`w-full py-3 mt-4 rounded-xl font-semibold transition ${
@@ -677,7 +810,7 @@ export default function ReportPetForm() {
           }`}
         >
           {isLoading ? "Processing..." : "Report Lost Pet"}
-        </button> */}
+        </button>
         <button
           type="submit"
           disabled={isLoading || !isVerified}

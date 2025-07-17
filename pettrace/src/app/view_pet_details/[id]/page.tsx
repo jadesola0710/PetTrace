@@ -143,8 +143,15 @@ export default function PetDetails() {
     finder: petArray[19] || "",
   };
 
+  const getImageUrl = () => {
+    if (!formattedPet.imageUrl) return "/default-formattedPet.jpg";
+    return formattedPet.imageUrl.startsWith("http")
+      ? formattedPet.imageUrl
+      : `https://ipfs.io/ipfs/${formattedPet.imageUrl}`;
+  };
+
   const thumbnails = [
-    formattedPet.imageUrl,
+    getImageUrl(),
     "/images/pet2.jpg",
     "/images/pet3.jpg",
     "/images/pet4.jpg",

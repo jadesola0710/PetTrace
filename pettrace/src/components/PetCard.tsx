@@ -28,6 +28,13 @@ export default function PetCard({ pet }: { pet: Pet }) {
     day: "numeric",
   });
 
+  const getImageUrl = () => {
+    if (!pet.imageUrl) return "/default-pet.jpg";
+    return pet.imageUrl.startsWith("http")
+      ? pet.imageUrl
+      : `https://ipfs.io/ipfs/${pet.imageUrl}`;
+  };
+
   return (
     <div className="relative w-full rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-shadow">
       {/* Top bar with location and heart icon */}
@@ -51,7 +58,7 @@ export default function PetCard({ pet }: { pet: Pet }) {
       {/* Pet Image */}
       <div className="w-full h-60 relative">
         <Image
-          src={pet.imageUrl || "/default-pet.png"}
+          src={getImageUrl() || "/default-pet.png"}
           alt={pet.name}
           fill
           className="object-cover"
