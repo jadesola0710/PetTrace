@@ -14,15 +14,20 @@ import {
   useWriteContract,
   useAccount,
   useWaitForTransactionReceipt,
+  useWalletClient,
 } from "wagmi";
 import PetTraceABI from "../../../../abi.json";
 import { useState, useEffect } from "react";
 import { toast } from "react-hot-toast";
 import Link from "next/link";
 import { FiArrowLeft } from "react-icons/fi";
+import { getReferralTag, submitReferral } from "@divvi/referral-sdk";
+import { encodeFunctionData, erc20Abi, formatUnits } from "viem";
+import { createPublicClient, http } from "viem";
+import { celo } from "viem/chains";
 
 // Updated to Celo contract address
-const CONTRACT_ADDRESS = "0x850388b814B69ec4Da3cB3ac7637768adf9A0B00";
+const CONTRACT_ADDRESS = "0x46Ec5416f003C20Ef386ffaC4D980D91102a3Be5";
 
 interface Pet {
   id: number;
@@ -41,6 +46,7 @@ interface Pet {
   contactEmail: string;
   celoBounty: number;
   cUSDBounty: number;
+  gDollarBounty: number;
   isFound: boolean;
   ownerConfirmed: boolean;
   finderConfirmed: boolean;
@@ -58,7 +64,21 @@ export default function PetDetails() {
   const [error, setError] = useState<string | null>(null);
   const { address, isConnected } = useAccount();
   const [activeImage, setActiveImage] = useState(0);
+  const { data: walletClient } = useWalletClient();
 
+  const publicClient = createPublicClient({
+    chain: celo,
+    transport: http(), // or your custom RPC URL
+  });
+
+  // 1. First define the G$ token address and decimals
+  const GDOLLAR_ADDRESS = "0x62B8B11039FcfE5aB0C56E502b1C372A3d2a9c7A"; // Celo mainnet
+  const GD_DECIMALS = 2; // G$ uses 2 decimals on Celo
+
+  // 2. Create the formatting function
+  const formatGd = (amount: bigint) => {
+    return formatUnits(amount, GD_DECIMALS) + " G$";
+  };
   // Add transaction waiting
   const {
     data: receipt,
@@ -67,6 +87,11 @@ export default function PetDetails() {
   } = useWaitForTransactionReceipt({
     hash: txHash as `0x${string}`,
   });
+
+  const DIVVI_CONFIG = {
+    user: address as `0x${string}`,
+    consumer: "0x124D8fad33E0b9fe9F3e1E90D0fC0055aBE8cA8d" as `0x${string}`,
+  };
 
   useEffect(() => {
     if (receipt && !isTxLoading) {
@@ -137,10 +162,11 @@ export default function PetDetails() {
     contactEmail: petArray[13],
     celoBounty: Number(petArray[14]),
     cUSDBounty: Number(petArray[15]),
-    isFound: petArray[16],
-    ownerConfirmed: petArray[17],
-    finderConfirmed: petArray[18],
-    finder: petArray[19] || "",
+    gDollarBounty: Number(petArray[16]),
+    isFound: petArray[17],
+    ownerConfirmed: petArray[18],
+    finderConfirmed: petArray[19],
+    finder: petArray[20] || "",
   };
 
   const getImageUrl = () => {
@@ -157,75 +183,297 @@ export default function PetDetails() {
     "/images/pet4.jpg",
   ];
 
-  const formatBounty = (amount: number, isCUSD: boolean = false) => {
+  const formatBounty1 = (amount: number, isCUSD: boolean = false) => {
     if (isCUSD) {
       return (amount / 1e18).toFixed(2) + " cUSD"; // cUSD uses 18 decimals on Celo
     }
     return (amount / 1e18).toFixed(4) + " CELO"; // CELO also uses 18 decimals
   };
 
-  const handleMarkAsFound = () => {
-    console.log("Attempting markAsFound with:", {
-      petId,
-      caller: address,
-      owner: formattedPet.owner,
-      isFound: formattedPet.isFound,
-      finder: formattedPet.finder,
-    });
-
-    if (!isConnected) {
-      const errMsg = "Please connect your wallet first";
-      setError(errMsg);
-      toast.error(errMsg);
-      return;
-    }
-
-    if (formattedPet.owner.toLowerCase() === address?.toLowerCase()) {
-      const errMsg = "You can't mark your own pet as found";
-      setError(errMsg);
-      toast.error(errMsg);
-      return;
-    }
-
-    if (formattedPet.isFound) {
-      const errMsg = "This pet has already been found";
-      setError(errMsg);
-      toast.error(errMsg);
-      return;
-    }
-
-    setIsMarkingFound(true);
-    setError(null);
-    setTxHash(null);
-
-    writeContract(
-      {
-        address: CONTRACT_ADDRESS,
-        abi: PetTraceABI.abi,
-        functionName: "markAsFound",
-        args: [petId],
-      },
-      {
-        onSuccess: (hash) => {
-          console.log("Transaction hash:", hash);
-          setTxHash(hash);
-          toast.success("Transaction submitted! Waiting for confirmation...");
-        },
-        onError: (error) => {
-          console.error("Transaction error:", error);
-          const errMsg = error.message || "Transaction failed";
-          setError(errMsg);
-          toast.error(errMsg);
-        },
-        onSettled: () => {
-          setIsMarkingFound(false);
-          refetchPetData();
-        },
-      }
+  const formatBounty = (
+    amount: number,
+    currency: "CELO" | "CUSD" | "G$" = "CELO"
+  ) => {
+    const formattedAmount = (amount / 1e18).toFixed(
+      currency === "CELO" ? 4 : 2
     );
+    return `${formattedAmount} ${currency}`;
   };
 
-  const handleConfirmFoundByOwner = () => {
+  // const handleClaimBounty1 = async () => {
+  //   console.log("Attempting to claim bounty:", {
+  //     petId,
+  //     caller: address,
+  //     finder: formattedPet.finder,
+  //     celoBounty: formattedPet.celoBounty,
+  //     cUSDBounty: formattedPet.cUSDBounty,
+  //   });
+
+  //   if (!isConnected || !walletClient) {
+  //     const errMsg = "Please connect your wallet first";
+  //     setError(errMsg);
+  //     toast.error(errMsg);
+  //     return;
+  //   }
+
+  //   if (formattedPet.finder.toLowerCase() !== address?.toLowerCase()) {
+  //     const errMsg = "Only the finder can claim the bounty";
+  //     setError(errMsg);
+  //     toast.error(errMsg);
+  //     return;
+  //   }
+
+  //   if (!formattedPet.isFound) {
+  //     const errMsg = "Pet must be confirmed as found by both parties";
+  //     setError(errMsg);
+  //     toast.error(errMsg);
+  //     return;
+  //   }
+
+  //   if (formattedPet.celoBounty <= 0 && formattedPet.cUSDBounty <= 0) {
+  //     const errMsg = "No bounty available to claim";
+  //     setError(errMsg);
+  //     toast.error(errMsg);
+  //     return;
+  //   }
+
+  //   if (
+  //     formattedPet.celoBounty <= 0 &&
+  //     formattedPet.cUSDBounty <= 0 &&
+  //     formattedPet.gDollarBounty <= 0
+  //   ) {
+  //     const errMsg = "No bounty available to claim";
+  //     setError(errMsg);
+  //     toast.error(errMsg);
+  //     return;
+  //   }
+
+  //   setIsClaimingBounty(true);
+  //   setError(null);
+  //   setTxHash(null);
+  //   const toastId = toast.loading("Processing bounty claim...");
+
+  //   try {
+  //     // Generate Divvi referral data suffix
+  //     const divviSuffix = getReferralTag(DIVVI_CONFIG);
+  //     console.log("Divvi suffix generated:", divviSuffix);
+
+  //     // Encode the contract function call
+  //     const encodedFunction = encodeFunctionData({
+  //       abi: PetTraceABI.abi,
+  //       functionName: "claimBounty",
+  //       args: [petId],
+  //     });
+  //     console.log("Encoded function data:", encodedFunction);
+
+  //     // Combine with Divvi suffix
+  //     const dataWithDivvi = (encodedFunction +
+  //       (divviSuffix.startsWith("0x")
+  //         ? divviSuffix.slice(2)
+  //         : divviSuffix)) as `0x${string}`;
+
+  //     // Send the transaction
+  //     console.log("Sending claimBounty transaction...");
+  //     const hash = await walletClient.sendTransaction({
+  //       account: address,
+  //       to: CONTRACT_ADDRESS,
+  //       data: dataWithDivvi,
+  //     });
+  //     console.log("Transaction hash:", hash);
+
+  //     setTxHash(hash);
+  //     toast.success("Bounty claim submitted! Processing...");
+
+  //     // Report to Divvi
+  //     console.log("Submitting to Divvi...");
+  //     await submitReferral({
+  //       txHash: hash,
+  //       chainId: 42220,
+  //     });
+  //     console.log("Successfully submitted to Divvi");
+
+  //     // Refetch pet data to update UI
+  //     await refetchPetData();
+  //   } catch (error) {
+  //     console.error("Error claiming bounty:", error);
+  //     const errMsg =
+  //       error instanceof Error ? error.message : "Failed to claim bounty";
+  //     setError(errMsg);
+  //     toast.error(errMsg);
+  //   } finally {
+  //     setIsClaimingBounty(false);
+  //     toast.dismiss(toastId);
+  //   }
+  // };
+
+  // const handleClaimGdBounty1 = async () => {
+  //   if (!walletClient || !publicClient) {
+  //     toast.error("Wallet not connected");
+  //     return;
+  //   }
+
+  //   try {
+  //     // Get pet details
+
+  //     const gdBounty = BigInt(formattedPet.gDollarBounty);
+
+  //     console.log("gdBounty", gdBounty);
+  //     if (gdBounty <= 0) {
+  //       throw new Error("No G$ bounty available");
+  //     }
+
+  //     // Display formatted amount
+  //     toast.loading(`Claiming ${formatGd(gdBounty)}...`);
+
+  //     // Execute claim
+  //     const { request } = await publicClient.simulateContract({
+  //       account: walletClient.account.address,
+  //       address: CONTRACT_ADDRESS,
+  //       abi: PetTraceABI.abi,
+  //       functionName: "claimBounty",
+  //       args: [petId],
+  //     });
+
+  //     const hash = await walletClient.writeContract(request);
+
+  //     // Wait for transaction receipt
+  //     const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  //     if (receipt.status === "success") {
+  //       toast.success(`Successfully claimed ${formatGd(gdBounty)}!`);
+  //     } else {
+  //       throw new Error("Transaction failed");
+  //     }
+  //   } catch (error) {
+  //     toast.error(
+  //       error instanceof Error ? error.message : "Failed to claim bounty"
+  //     );
+  //   }
+  // };
+
+  const handleClaimGdBounty = async () => {
+    if (!walletClient || !publicClient || !address) {
+      toast.error("Wallet not connected");
+      return;
+    }
+
+    try {
+      // 1. Convert bounty amount to BigInt (safely)
+      const gdBounty = BigInt(formattedPet.gDollarBounty);
+      console.log("G$ Bounty Amount:", gdBounty);
+
+      // 2. Validate bounty amount
+      if (gdBounty <= BigInt(0)) {
+        // Using 0n for BigInt comparison
+        throw new Error("No G$ bounty available to claim");
+      }
+
+      // 3. Verify you're the designated finder
+      if (formattedPet.finder.toLowerCase() !== address.toLowerCase()) {
+        throw new Error("Only the designated finder can claim this bounty");
+      }
+
+      // 4. Verify pet is marked as found
+      if (!formattedPet.isFound) {
+        throw new Error(
+          "Pet must be confirmed as found before claiming bounty"
+        );
+      }
+
+      toast.loading(`Claiming ${formatGd(gdBounty)}...`);
+
+      // 5. Execute claim with proper gas estimation
+      const { request } = await publicClient.simulateContract({
+        account: address,
+        address: CONTRACT_ADDRESS,
+        abi: PetTraceABI.abi,
+        functionName: "claimBounty",
+        args: [petId],
+      });
+
+      const hash = await walletClient.writeContract(request);
+      console.log("Transaction hash:", hash);
+
+      // 6. Wait for confirmation
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+
+      if (receipt.status === "success") {
+        toast.success(`Successfully claimed ${formatGd(gdBounty)}!`);
+        await refetchPetData(); // Refresh pet data after successful claim
+      } else {
+        throw new Error("Transaction failed on-chain");
+      }
+    } catch (error) {
+      console.error("Bounty claim error:", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to process bounty claim"
+      );
+    }
+  };
+
+  const handleClaimBounty = async () => {
+    if (!isConnected || !walletClient) {
+      toast.error("Please connect your wallet first");
+      return;
+    }
+
+    if (formattedPet.finder.toLowerCase() !== address?.toLowerCase()) {
+      toast.error("Only the finder can claim the bounty");
+      return;
+    }
+
+    if (!formattedPet.isFound) {
+      toast.error("Pet must be confirmed as found by both parties");
+      return;
+    }
+
+    if (
+      formattedPet.celoBounty <= 0 &&
+      formattedPet.cUSDBounty <= 0 &&
+      formattedPet.gDollarBounty <= 0
+    ) {
+      toast.error("No bounty available to claim");
+      return;
+    }
+
+    setIsClaimingBounty(true);
+    const toastId = toast.loading("Processing bounty claim...");
+
+    try {
+      const divviSuffix = getReferralTag(DIVVI_CONFIG);
+      const encodedFunction = encodeFunctionData({
+        abi: PetTraceABI.abi,
+        functionName: "claimBounty",
+        args: [petId],
+      });
+
+      const dataWithDivvi = (encodedFunction +
+        (divviSuffix.startsWith("0x")
+          ? divviSuffix.slice(2)
+          : divviSuffix)) as `0x${string}`;
+
+      const hash = await walletClient.sendTransaction({
+        account: address,
+        to: CONTRACT_ADDRESS,
+        data: dataWithDivvi,
+      });
+
+      setTxHash(hash);
+      toast.success("Bounty claim submitted!");
+      await submitReferral({ txHash: hash, chainId: 42220 });
+      await refetchPetData();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to claim bounty"
+      );
+    } finally {
+      setIsClaimingBounty(false);
+      toast.dismiss(toastId);
+    }
+  };
+
+  const handleConfirmFoundByOwner = async () => {
     console.log("Attempting confirmFoundByOwner with:", {
       petId,
       caller: address,
@@ -234,7 +482,7 @@ export default function PetDetails() {
       ownerConfirmed: formattedPet.ownerConfirmed,
     });
 
-    if (!isConnected) {
+    if (!isConnected || !walletClient) {
       const errMsg = "Please connect your wallet first";
       setError(errMsg);
       toast.error(errMsg);
@@ -259,101 +507,142 @@ export default function PetDetails() {
     setError(null);
     setTxHash(null);
 
-    writeContract(
-      {
-        address: CONTRACT_ADDRESS,
+    try {
+      // Generate Divvi referral data suffix
+      const divviSuffix = getReferralTag(DIVVI_CONFIG);
+      console.log("Divvi suffix generated:", divviSuffix);
+
+      // Encode the contract function call
+      const encodedFunction = encodeFunctionData({
         abi: PetTraceABI.abi,
         functionName: "confirmFoundByOwner",
         args: [petId],
-      },
-      {
-        onSuccess: (hash) => {
-          console.log("Confirmation tx hash:", hash);
-          setTxHash(hash);
-          toast.success("Confirmation submitted! Waiting...");
-        },
-        onError: (error) => {
-          console.error("Confirmation error:", error);
-          const errMsg = error.message || "Confirmation failed";
-          setError(errMsg);
-          toast.error(errMsg);
-        },
-        onSettled: () => {
-          setIsConfirmingFound(false);
-          refetchPetData();
-        },
-      }
-    );
+      });
+      console.log("Encoded function data:", encodedFunction);
+
+      // Combine with Divvi suffix
+      const dataWithDivvi = (encodedFunction +
+        (divviSuffix.startsWith("0x")
+          ? divviSuffix.slice(2)
+          : divviSuffix)) as `0x${string}`;
+
+      // Send the transaction
+      console.log("Sending confirmFoundByOwner transaction...");
+      const hash = await walletClient.sendTransaction({
+        account: address,
+        to: CONTRACT_ADDRESS,
+        data: dataWithDivvi,
+      });
+      console.log("Transaction hash:", hash);
+
+      setTxHash(hash);
+      toast.success("Confirmation submitted! Processing...");
+
+      // Report to Divvi
+      console.log("Submitting to Divvi...");
+      await submitReferral({
+        txHash: hash,
+        chainId: 42220,
+      });
+      console.log("Successfully submitted to Divvi");
+
+      // Refetch pet data to update UI
+      await refetchPetData();
+    } catch (error) {
+      console.error("Error confirming found status:", error);
+      const errMsg =
+        error instanceof Error ? error.message : "Confirmation failed";
+      setError(errMsg);
+      toast.error(errMsg);
+    } finally {
+      setIsConfirmingFound(false);
+    }
   };
 
-  const handleClaimBounty = () => {
-    console.log("Attempting to claim bounty:", {
+  const handleMarkAsFound = async () => {
+    console.log("Attempting markAsFound with:", {
       petId,
       caller: address,
+      owner: formattedPet.owner,
+      isFound: formattedPet.isFound,
       finder: formattedPet.finder,
-      celoBounty: formattedPet.celoBounty,
-      cUSDBounty: formattedPet.cUSDBounty,
     });
 
-    if (!isConnected) {
+    if (!isConnected || !walletClient) {
       const errMsg = "Please connect your wallet first";
       setError(errMsg);
       toast.error(errMsg);
       return;
     }
 
-    if (formattedPet.finder.toLowerCase() !== address?.toLowerCase()) {
-      const errMsg = "Only the finder can claim the bounty";
+    if (formattedPet.owner.toLowerCase() === address?.toLowerCase()) {
+      const errMsg = "You can't mark your own pet as found";
       setError(errMsg);
       toast.error(errMsg);
       return;
     }
 
-    if (!formattedPet.isFound) {
-      const errMsg = "Pet must be confirmed as found by both parties";
+    if (formattedPet.isFound) {
+      const errMsg = "This pet has already been found";
       setError(errMsg);
       toast.error(errMsg);
       return;
     }
 
-    if (formattedPet.celoBounty <= 0 && formattedPet.cUSDBounty <= 0) {
-      const errMsg = "No bounty available to claim";
-      setError(errMsg);
-      toast.error(errMsg);
-      return;
-    }
-
-    setIsClaimingBounty(true);
+    setIsMarkingFound(true);
     setError(null);
     setTxHash(null);
-    toast.loading("Processing bounty claim...");
 
-    writeContract(
-      {
-        address: CONTRACT_ADDRESS,
+    try {
+      // Generate Divvi referral data suffix
+      const divviSuffix = getReferralTag(DIVVI_CONFIG);
+      console.log("Divvi suffix generated:", divviSuffix);
+
+      // Encode the contract function call
+      const encodedFunction = encodeFunctionData({
         abi: PetTraceABI.abi,
-        functionName: "claimBounty",
+        functionName: "markAsFound",
         args: [petId],
-      },
-      {
-        onSuccess: (hash) => {
-          console.log("Bounty claim tx hash:", hash);
-          setTxHash(hash);
-          toast.success("Bounty claim submitted! Waiting for confirmation...");
-        },
-        onError: (error) => {
-          console.error("Bounty claim error:", error);
-          const errMsg = error.message || "Failed to claim bounty";
-          setError(errMsg);
-          toast.error(errMsg);
-        },
-        onSettled: () => {
-          setIsClaimingBounty(false);
-          refetchPetData();
-          toast.dismiss();
-        },
-      }
-    );
+      });
+      console.log("Encoded function data:", encodedFunction);
+
+      // Combine with Divvi suffix
+      const dataWithDivvi = (encodedFunction +
+        (divviSuffix.startsWith("0x")
+          ? divviSuffix.slice(2)
+          : divviSuffix)) as `0x${string}`;
+
+      // Send the transaction
+      console.log("Sending markAsFound transaction...");
+      const hash = await walletClient.sendTransaction({
+        account: address,
+        to: CONTRACT_ADDRESS,
+        data: dataWithDivvi,
+      });
+      console.log("Transaction hash:", hash);
+
+      setTxHash(hash);
+      toast.success("Pet marked as found! Processing...");
+
+      // Report to Divvi
+      console.log("Submitting to Divvi...");
+      await submitReferral({
+        txHash: hash,
+        chainId: 42220, // Use current chainId or fallback to Celo mainnet
+      });
+      console.log("Successfully submitted to Divvi");
+
+      // Refetch pet data to update UI
+      await refetchPetData();
+    } catch (error) {
+      console.error("Error marking pet as found:", error);
+      const errMsg =
+        error instanceof Error ? error.message : "Failed to mark pet as found";
+      setError(errMsg);
+      toast.error(errMsg);
+    } finally {
+      setIsMarkingFound(false);
+    }
   };
 
   return (
@@ -429,7 +718,39 @@ export default function PetDetails() {
               )}
               {formattedPet.cUSDBounty > 0 && (
                 <span className="text-xl font-bold bg-white px-4 py-2 rounded-lg shadow-sm">
-                  {formatBounty(formattedPet.cUSDBounty, true)}
+                  {formatBounty(formattedPet.cUSDBounty)}
+                </span>
+              )}
+            </div>
+            {formattedPet.isFound && (
+              <div className="mt-3 text-sm text-green-600 font-medium">
+                This pet has been found!
+              </div>
+            )}
+          </div>
+
+          {/* Bounty Card */}
+          <div className="mt-6 bg-gradient-to-r from-indigo-50 to-purple-50 p-5 rounded-xl border border-indigo-100 shadow-sm">
+            <h3 className="text-lg font-semibold text-indigo-700 mb-3 flex items-center">
+              <span className="bg-indigo-100 p-2 rounded-full mr-3">
+                <FaHeart className="text-indigo-600" />
+              </span>
+              Reward for Finding
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {formattedPet.celoBounty > 0 && (
+                <span className="text-xl font-bold bg-white px-4 py-2 rounded-lg shadow-sm">
+                  {formatBounty(formattedPet.celoBounty, "CELO")}
+                </span>
+              )}
+              {formattedPet.cUSDBounty > 0 && (
+                <span className="text-xl font-bold bg-white px-4 py-2 rounded-lg shadow-sm">
+                  {formatBounty(formattedPet.cUSDBounty, "CUSD")}
+                </span>
+              )}
+              {formattedPet.gDollarBounty > 0 && (
+                <span className="text-xl font-bold bg-white px-4 py-2 rounded-lg shadow-sm">
+                  {formatBounty(formattedPet.gDollarBounty, "G$")}
                 </span>
               )}
             </div>
@@ -599,14 +920,24 @@ export default function PetDetails() {
               {formattedPet.isFound &&
                 formattedPet.finder.toLowerCase() === address?.toLowerCase() &&
                 (formattedPet.celoBounty > 0 ||
-                  formattedPet.cUSDBounty > 0) && (
-                  <button
-                    onClick={handleClaimBounty}
-                    disabled={isClaimingBounty}
-                    className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white py-3 px-6 rounded-xl font-medium transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
-                  >
-                    {isClaimingBounty ? "Claiming..." : "Claim Reward"}
-                  </button>
+                  formattedPet.cUSDBounty > 0 ||
+                  formattedPet.gDollarBounty > 0) && (
+                  <>
+                    <button
+                      onClick={handleClaimBounty}
+                      disabled={isClaimingBounty}
+                      className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white py-3 px-6 rounded-xl font-medium transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
+                    >
+                      {isClaimingBounty ? "Claiming..." : "Claim Reward"}
+                    </button>
+
+                    {/* <button
+                      onClick={handleClaimGdBounty}
+                      disabled={isClaimingBounty}
+                    >
+                      {isClaimingBounty ? "Claiming G$..." : "Claim G$ Bounty"}
+                    </button> */}
+                  </>
                 )}
 
               <Link

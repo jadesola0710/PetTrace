@@ -19,6 +19,10 @@ interface IERC20 {
     ) external view returns (uint256);
 }
 
+/**
+ * @title IERC677 Interface
+ * @dev Interface for ERC677 token transfer with callback
+ */
 interface IERC677 is IERC20 {
     function transferAndCall(
         address to,
@@ -40,18 +44,23 @@ contract PetTrace {
     // Constants
     address public constant CUSD_ADDRESS =
         0x765DE816845861e75A25fCA122bb6898B8B1282a;
-    address public constant GDOLLAR_ADDRESS =
+
+    address public constant GD_ADDRESS =
         0x62B8B11039FcfE5aB0C56E502b1C372A3d2a9c7A;
+    address public constant UBI_POOL =
+        0x43d72Ff17701B2DA814620735C39C620Ce0ea4A1;
 
     uint256 public constant MAX_CELO_BOUNTY = 10 ether;
     uint256 public constant MAX_CUSD_BOUNTY = 10000 * 1e18;
+    uint256 public constant MAX_GD_BOUNTY = 100000 * 1e18;
     uint256 public constant BOUNTY_TIMEOUT = 90 days;
 
     // Pet data storage
     uint256 public nextPetId;
     mapping(uint256 => Pet) public pets;
     mapping(uint256 => uint256) public escrowedCUSD;
-    mapping(uint256 => uint256) public escrowedGDOLLAR;
+    mapping(uint256 => uint256) public escrowedGD;
+
     mapping(uint256 => uint256) public postTime;
 
     struct Pet {
@@ -71,7 +80,7 @@ contract PetTrace {
         string contactEmail;
         uint128 celoBounty;
         uint128 cUSDBounty;
-        uint128 gDollarBounty;
+        uint128 gdBounty;
         bool isFound;
         bool ownerConfirmed;
         bool finderConfirmed;
@@ -109,7 +118,7 @@ contract PetTrace {
         address indexed finder,
         uint256 celoAmount,
         uint256 cUSDAmount,
-        uint256 gDollarAmount
+        uint256 gdAmount
     );
     event ConfirmationAdded(
         uint256 indexed petId,
@@ -121,7 +130,7 @@ contract PetTrace {
         address indexed owner,
         uint256 celoAmount,
         uint256 cUSDAmount,
-        uint256 gDollarAmount
+        uint256 gdAmount
     );
     event AdminChanged(address indexed newAdmin);
 
@@ -149,14 +158,15 @@ contract PetTrace {
         string calldata contactPhone,
         string calldata contactEmail,
         uint128 cUSDBounty,
-        uint128 gDollarBounty
+        uint128 gdBounty
     ) external payable nonReentrant {
         // Input validation
         require(msg.value <= MAX_CELO_BOUNTY, "CELO bounty too large");
         require(cUSDBounty <= MAX_CUSD_BOUNTY, "cUSD bounty too large");
-        require(gDollarBounty <= MAX_CUSD_BOUNTY, "G$ bounty too large");
+        require(msg.value > 0 || cUSDBounty > 0, "Bounty required");
+        require(gdBounty <= MAX_GD_BOUNTY, "G$ bounty too large");
         require(
-            msg.value > 0 || cUSDBounty > 0 || gDollarBounty > 0,
+            msg.value > 0 || cUSDBounty > 0 || gdBounty > 0,
             "Bounty required"
         );
 
@@ -173,17 +183,6 @@ contract PetTrace {
         require(ageMonths >= 1 && ageMonths <= 240, "Invalid age");
         require(_isValidEmail(contactEmail), "Invalid email");
 
-        if (gDollarBounty > 0) {
-            require(
-                IERC20(GDOLLAR_ADDRESS).transferFrom(
-                    msg.sender,
-                    address(this),
-                    gDollarBounty
-                ),
-                "G$ transfer failed"
-            );
-            escrowedGDOLLAR[nextPetId] = gDollarBounty;
-        }
         // Handle cUSD transfer
         if (cUSDBounty > 0) {
             require(
@@ -197,6 +196,40 @@ contract PetTrace {
             escrowedCUSD[nextPetId] = cUSDBounty;
         }
 
+        // Handle G$ transfer with UBI pool contribution
+        if (gdBounty > 0) {
+            uint256 ubiContribution = gdBounty / 100; // 1% to UBI pool
+            uint256 netGdBounty = gdBounty - ubiContribution;
+
+            // Encode pet data for transferAndCall
+            bytes memory petData = abi.encode(
+                name,
+                breed,
+                gender,
+                sizeCm,
+                ageMonths,
+                dateTimeLost,
+                description,
+                imageUrl,
+                lastSeenLocation,
+                contactName,
+                contactPhone,
+                contactEmail,
+                ubiContribution
+            );
+
+            // Single transaction: Transfer G$ + register pet
+            require(
+                IERC677(GD_ADDRESS).transferAndCall(
+                    address(this),
+                    netGdBounty,
+                    petData
+                ),
+                "G$ transfer failed"
+            );
+
+            escrowedGD[nextPetId] = netGdBounty;
+        }
         // Create pet record
         pets[nextPetId] = Pet({
             id: nextPetId,
@@ -215,7 +248,7 @@ contract PetTrace {
             contactEmail: contactEmail,
             celoBounty: uint128(msg.value),
             cUSDBounty: cUSDBounty,
-            gDollarBounty: gDollarBounty,
+            gdBounty: gdBounty,
             isFound: false,
             ownerConfirmed: false,
             finderConfirmed: false,
@@ -272,76 +305,24 @@ contract PetTrace {
      * @notice Claim bounty for found pet
      * @dev Can only be called by finder after confirmation
      */
-    // function claimBounty1(
-    //     uint256 petId
-    // ) external petExists(petId) nonReentrant {
-    //     Pet storage pet = pets[petId];
-    //     require(pet.isFound, "Pet not found");
-    //     require(msg.sender == pet.finder, "Not finder");
-    //     require(pet.celoBounty > 0 || pet.cUSDBounty > 0, "No bounty");
-
-    //     uint256 celoAmount = pet.celoBounty;
-    //     uint256 cUSDAmount = pet.cUSDBounty;
-    //     uint256 gDollarAmount = pet.gDollarBounty;
-
-    //     // Reset state before transfers
-    //     pet.celoBounty = 0;
-    //     pet.cUSDBounty = 0;
-    //     pet.gDollarBounty = 0;
-    //     escrowedCUSD[petId] = 0;
-    //     escrowedGDOLLAR[petId] = 0;
-
-    //     // Transfer funds
-    //     if (celoAmount > 0) {
-    //         payable(msg.sender).transfer(celoAmount);
-    //     }
-    //     if (cUSDAmount > 0) {
-    //         require(
-    //             IERC20(CUSD_ADDRESS).transfer(msg.sender, cUSDAmount),
-    //             "cUSD transfer failed"
-    //         );
-    //     }
-
-    //     if (gDollarAmount > 0) {
-    //         require(
-    //             IERC20(GDOLLAR_ADDRESS).transferAndCall(
-    //                 msg.sender,
-    //                 gDollarAmount,
-    //                 ""
-    //             ),
-    //             "G$ transfer failed"
-    //         );
-    //         escrowedGDOLLAR[petId] = 0;
-    //     }
-
-    //     emit BountyClaimed(
-    //         petId,
-    //         msg.sender,
-    //         celoAmount,
-    //         cUSDAmount,
-    //         gDollarAmount
-    //     );
-    // }
-
     function claimBounty(uint256 petId) external petExists(petId) nonReentrant {
         Pet storage pet = pets[petId];
         require(pet.isFound, "Pet not found");
         require(msg.sender == pet.finder, "Not finder");
         require(
-            pet.celoBounty > 0 || pet.cUSDBounty > 0 || pet.gDollarBounty > 0,
+            pet.celoBounty > 0 || pet.cUSDBounty > 0 || pet.gdBounty > 0,
             "No bounty"
         );
 
         uint256 celoAmount = pet.celoBounty;
         uint256 cUSDAmount = pet.cUSDBounty;
-        uint256 gDollarAmount = pet.gDollarBounty;
+        uint256 gdAmount = pet.gdBounty;
 
         // Reset state before transfers
         pet.celoBounty = 0;
         pet.cUSDBounty = 0;
-        pet.gDollarBounty = 0;
         escrowedCUSD[petId] = 0;
-        escrowedGDOLLAR[petId] = 0;
+        escrowedGD[petId] = 0;
 
         // Transfer funds
         if (celoAmount > 0) {
@@ -353,29 +334,15 @@ contract PetTrace {
                 "cUSD transfer failed"
             );
         }
-        if (gDollarAmount > 0) {
+
+        if (gdAmount > 0) {
             require(
-                escrowedGDOLLAR[petId] >= gDollarAmount,
-                "Insufficient G$ escrow"
-            );
-            require(
-                IERC20(GDOLLAR_ADDRESS).balanceOf(address(this)) >=
-                    gDollarAmount,
-                "Insufficient contract G$ balance"
-            );
-            require(
-                IERC20(GDOLLAR_ADDRESS).transfer(msg.sender, gDollarAmount),
+                IERC20(GD_ADDRESS).transfer(msg.sender, gdAmount),
                 "G$ transfer failed"
             );
         }
 
-        emit BountyClaimed(
-            petId,
-            msg.sender,
-            celoAmount,
-            cUSDAmount,
-            gDollarAmount
-        );
+        emit BountyClaimed(petId, msg.sender, celoAmount, cUSDAmount, gdAmount);
     }
 
     /**
@@ -391,15 +358,15 @@ contract PetTrace {
 
         uint256 celoAmount = pet.celoBounty;
         uint256 cUSDAmount = pet.cUSDBounty;
-        uint256 gDollarAmount = pet.gDollarBounty;
+        uint256 gdAmount = pet.gdBounty;
 
         // Reset state
         pet.celoBounty = 0;
         pet.cUSDBounty = 0;
-        pet.gDollarBounty = 0; // Add this
+        pet.gdBounty = 0;
 
         escrowedCUSD[petId] = 0;
-        escrowedGDOLLAR[petId] = 0; // Add this
+        escrowedGD[petId] = 0;
 
         // Refund funds
         if (celoAmount > 0) {
@@ -411,9 +378,10 @@ contract PetTrace {
                 "cUSD refund failed"
             );
         }
-        if (gDollarAmount > 0) {
+
+        if (gdAmount > 0) {
             require(
-                IERC20(GDOLLAR_ADDRESS).transfer(msg.sender, gDollarAmount),
+                IERC20(GD_ADDRESS).transfer(msg.sender, gdAmount),
                 "G$ refund failed"
             );
         }
@@ -423,7 +391,7 @@ contract PetTrace {
             msg.sender,
             celoAmount,
             cUSDAmount,
-            gDollarAmount
+            gdAmount
         );
     }
 
@@ -448,6 +416,127 @@ contract PetTrace {
         require(IERC20(CUSD_ADDRESS).transfer(to, balance), "Transfer failed");
     }
 
+    /**
+     * @notice Emergency withdraw G$ (admin only)
+     * @param to Address to send funds to
+     */
+    function emergencyWithdrawGD(address to) external onlyAdmin {
+        uint256 balance = IERC20(GD_ADDRESS).balanceOf(address(this));
+        require(IERC20(GD_ADDRESS).transfer(to, balance), "Transfer failed");
+    }
+
+    /**
+     * @dev ERC-677 token transfer callback for G$ token
+     * @param from Sender address
+     * @param value Amount transferred
+     * @param data Additional data (contains pet ID)
+     */
+    function onTokenTransfer1(
+        address from,
+        uint256 value,
+        bytes calldata data
+    ) external returns (bool) {
+        require(msg.sender == GD_ADDRESS, "Only G$ token");
+
+        // Extract pet ID from data (first 32 bytes)
+        uint256 petId = abi.decode(data[:32], (uint256));
+        Pet storage pet = pets[petId];
+
+        require(pet.owner == from, "Not pet owner");
+        require(!pet.isFound, "Pet already found");
+        require(pet.finder == address(0), "Finder already assigned");
+
+        uint256 ubiContribution = value / 100; // 1% for UBI pool
+        uint256 netAmount = value - ubiContribution;
+
+        // Update bounty amounts
+        pet.gdBounty += uint128(netAmount);
+        escrowedGD[petId] += netAmount;
+
+        return true;
+    }
+
+    /**
+     * @dev ERC-677 callback for G$ token transfers
+     * @param from Sender address (pet owner)
+     * @param value Amount of G$ sent
+     * @param data Encoded pet details (same as postLostPet params)
+     */
+    function onTokenTransfer(
+        address from,
+        uint256 value,
+        bytes calldata data
+    ) external returns (bool) {
+        // Ensure only G$ token can call this
+        require(msg.sender == GD_ADDRESS, "Only G$ token");
+
+        // Decode pet data from `transferAndCall`
+        (
+            string memory name,
+            string memory breed,
+            string memory gender,
+            uint128 sizeCm,
+            uint128 ageMonths,
+            string memory dateTimeLost,
+            string memory description,
+            string memory imageUrl,
+            string memory lastSeenLocation,
+            string memory contactName,
+            string memory contactPhone,
+            string memory contactEmail,
+            uint256 ubiContribution
+        ) = abi.decode(
+                data,
+                (
+                    string,
+                    string,
+                    string,
+                    uint128,
+                    uint128,
+                    string,
+                    string,
+                    string,
+                    string,
+                    string,
+                    string,
+                    string,
+                    uint256
+                )
+            );
+
+        // Validate UBI contribution (1%)
+        require(ubiContribution == value / 100, "Invalid UBI contribution");
+
+        // Create pet record (same logic as postLostPet)
+        pets[nextPetId] = Pet({
+            id: nextPetId,
+            owner: payable(from),
+            name: name,
+            breed: breed,
+            gender: gender,
+            sizeCm: sizeCm,
+            ageMonths: ageMonths,
+            dateTimeLost: dateTimeLost,
+            description: description,
+            imageUrl: imageUrl,
+            lastSeenLocation: lastSeenLocation,
+            contactName: contactName,
+            contactPhone: contactPhone,
+            contactEmail: contactEmail,
+            celoBounty: 0,
+            cUSDBounty: 0,
+            gdBounty: uint128(value - ubiContribution), // Net bounty after UBI
+            isFound: false,
+            ownerConfirmed: false,
+            finderConfirmed: false,
+            finder: address(0)
+        });
+
+        emit PetPosted(nextPetId, from);
+        nextPetId++;
+
+        return true; // Acknowledge successful transfer
+    }
     // ==================== VIEW FUNCTIONS ====================
 
     /**
@@ -538,7 +627,7 @@ contract PetTrace {
             pet.contactEmail,
             pet.celoBounty,
             pet.cUSDBounty,
-            pet.gDollarBounty,
+            pet.gdBounty,
             pet.isFound,
             pet.ownerConfirmed,
             pet.finderConfirmed,

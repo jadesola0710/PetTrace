@@ -12,14 +12,16 @@ import { celo } from "wagmi/chains";
 import { toast } from "react-hot-toast";
 import PetTraceABI from "../../abi.json";
 import { erc20Abi } from "viem";
-import { getDataSuffix, submitReferral } from "@divvi/referral-sdk";
+import { getReferralTag, submitReferral } from "@divvi/referral-sdk";
 import SelfQRcodeWrapper, {
   SelfAppBuilder,
   type SelfApp,
 } from "@selfxyz/qrcode";
 
-const CONTRACT_ADDRESS = "0x850388b814B69ec4Da3cB3ac7637768adf9A0B00";
+// Contract addresses
+const CONTRACT_ADDRESS = "0x46Ec5416f003C20Ef386ffaC4D980D91102a3Be5";
 const CUSD_ADDRESS = "0x765DE816845861e75A25fCA122bb6898B8B1282a";
+const GDOLLAR_ADDRESS = "0x62B8B11039FcfE5aB0C56E502b1C372A3d2a9c7A";
 
 interface PetFormData {
   name: string;
@@ -35,7 +37,9 @@ interface PetFormData {
   contactEmail: string;
   ethBounty: string;
   cusdBounty: string;
+  gDollarBounty: string;
   useCUSD: boolean;
+  useGDOLLAR: boolean;
 }
 
 export default function ReportPetForm() {
@@ -43,19 +47,17 @@ export default function ReportPetForm() {
   const { address, chainId } = useAccount();
   const { data: walletClient } = useWalletClient();
 
+  // State management
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCorrectNetwork, setIsCorrectNetwork] = useState(false);
   const [approvalToastId, setApprovalToastId] = useState<string | null>(null);
   const [reportToastId, setReportToastId] = useState<string | null>(null);
   const [approvalHash, setApprovalHash] = useState<`0x${string}` | undefined>();
   const [reportHash, setReportHash] = useState<`0x${string}` | undefined>();
-  const [showToast, setShowToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState("");
   const [selfApp, setSelfApp] = useState<SelfApp | null>(null);
   const [isVerified, setIsVerified] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<PetFormData>({
@@ -72,10 +74,12 @@ export default function ReportPetForm() {
     contactEmail: "",
     ethBounty: "0.1",
     cusdBounty: "1",
+    gDollarBounty: "10", // Default G$ bounty
     useCUSD: false,
+    useGDOLLAR: false,
   });
 
-  // Transaction confirmation hooks
+  // Transaction hooks
   const { isSuccess: isApprovalConfirmed } = useWaitForTransactionReceipt({
     hash: approvalHash,
   });
@@ -84,11 +88,17 @@ export default function ReportPetForm() {
     hash: reportHash,
   });
 
+  const DIVVI_CONFIG = {
+    user: address as `0x${string}`,
+    consumer: "0x124D8fad33E0b9fe9F3e1E90D0fC0055aBE8cA8d" as `0x${string}`,
+  };
+
   // Check network
   useEffect(() => {
     setIsCorrectNetwork(chainId === celo.id);
   }, [chainId]);
 
+  // Handle form changes
   const handleChange = (
     e: React.ChangeEvent<
       HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
@@ -98,10 +108,16 @@ export default function ReportPetForm() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleToggleCurrency = () => {
-    setFormData((prev) => ({ ...prev, useCUSD: !prev.useCUSD }));
+  // Handle currency selection
+  const handleSelectCurrency = (currency: "CELO" | "CUSD" | "G$") => {
+    setFormData((prev) => ({
+      ...prev,
+      useCUSD: currency === "CUSD",
+      useGDOLLAR: currency === "G$",
+    }));
   };
 
+  // Form validation
   const validateForm = () => {
     if (!address) {
       toast.error("Please connect your wallet");
@@ -113,6 +129,7 @@ export default function ReportPetForm() {
       return false;
     }
 
+    // Required fields check
     const requiredFields = [
       "name",
       "breed",
@@ -135,38 +152,48 @@ export default function ReportPetForm() {
       }
     }
 
-    const bounty = formData.useCUSD ? formData.cusdBounty : formData.ethBounty;
-    if (isNaN(parseFloat(bounty))) {
+    // Bounty validation
+    let bountyAmount = "";
+    if (formData.useCUSD) {
+      bountyAmount = formData.cusdBounty;
+    } else if (formData.useGDOLLAR) {
+      bountyAmount = formData.gDollarBounty;
+    } else {
+      bountyAmount = formData.ethBounty;
+    }
+
+    if (isNaN(parseFloat(bountyAmount))) {
       toast.error("Please enter a valid bounty amount");
       return false;
     }
 
-    if (parseFloat(bounty) <= 0) {
+    if (parseFloat(bountyAmount) <= 0) {
       toast.error("Bounty amount must be greater than 0");
+      return false;
+    }
+
+    if (!file) {
+      toast.error("Please upload a pet image");
       return false;
     }
 
     return true;
   };
 
-  const approveCUSD = async (amount: string) => {
-    console.log("[APPROVAL] Starting cUSD approval", { amount });
-
+  // Token approval functions
+  const approveToken = async (
+    tokenAddress: string,
+    amount: string,
+    tokenName: string
+  ) => {
     if (!walletClient || !address) {
-      console.error("[APPROVAL ERROR] Wallet not connected");
       toast.error("Wallet not connected");
       return;
     }
 
     try {
       const amountInWei = parseEther(amount);
-      console.log("[APPROVAL] Amount in wei:", amountInWei.toString());
-
-      if (approvalToastId) {
-        toast.dismiss(approvalToastId);
-      }
-
-      const toastId = toast.loading("Approving cUSD spending...");
+      const toastId = toast.loading(`Approving ${tokenName} spending...`);
       setApprovalToastId(toastId);
 
       const approvalData = encodeFunctionData({
@@ -175,27 +202,22 @@ export default function ReportPetForm() {
         args: [CONTRACT_ADDRESS, amountInWei],
       });
 
-      console.log("[APPROVAL] Encoded approval data:", approvalData);
-
-      console.log("[APPROVAL] Sending transaction...");
       const hash = await walletClient.sendTransaction({
         account: address,
-        to: CUSD_ADDRESS,
+        to: tokenAddress as `0x${string}`,
         data: approvalData,
       });
 
-      console.log("[APPROVAL] Transaction sent, hash:", hash);
       setApprovalHash(hash as `0x${string}`);
-
       return hash;
     } catch (error) {
-      console.error("[APPROVAL ERROR]", error);
-      toast.error("Failed to approve cUSD spending");
+      toast.error(`Failed to approve ${tokenName} spending`);
       setApprovalToastId(null);
       throw error;
     }
   };
 
+  // File handling
   const handleFileChange = (
     fileOrEvent: File | React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -210,7 +232,6 @@ export default function ReportPetForm() {
 
     if (!selectedFile) return;
 
-    // Rest of your validation logic...
     if (!selectedFile.type.startsWith("image/")) {
       setError("Only image files are allowed");
       return;
@@ -222,19 +243,20 @@ export default function ReportPetForm() {
     }
 
     setFile(selectedFile);
-
-    // Create preview
     const reader = new FileReader();
     reader.onload = () => setPreview(reader.result as string);
     reader.readAsDataURL(selectedFile);
   };
 
+  // IPFS upload
   const uploadToIPFS = async (file: File): Promise<string> => {
     const formData = new FormData();
     formData.append("file", file);
     formData.append(
       "pinataMetadata",
-      JSON.stringify({ name: `pettrace-image-${Date.now()}` })
+      JSON.stringify({
+        name: `pettrace-image-${Date.now()}`,
+      })
     );
 
     const response = await axios.post(
@@ -255,73 +277,58 @@ export default function ReportPetForm() {
     return `https://gateway.pinata.cloud/ipfs/${response.data.IpfsHash}`;
   };
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-        handleFileChange(e.dataTransfer.files[0]);
-      }
-    },
-    [handleFileChange]
-  );
+  // Drag and drop handlers
+  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer.files?.[0]) {
+      handleFileChange(e.dataTransfer.files[0]);
+    }
+  }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
   }, []);
 
+  // Main pet reporting function
   const reportPet = async () => {
-    console.log("[REPORT] Starting pet report");
+    if (!walletClient || !address) {
+      toast.error("Wallet not connected");
+      return;
+    }
 
     try {
-      if (!walletClient || !address) {
-        console.error("[REPORT ERROR] Wallet not connected");
-        toast.error("Wallet not connected");
-        return;
-      }
-
-      if (reportToastId) {
-        toast.dismiss(reportToastId);
-      }
-
-      const imageUrl = await uploadToIPFS(file!);
-      const ipfsHash = imageUrl.split("/").pop() || "";
-
-      // Validate URL length (matches contract MAX_URL_LENGTH = 200)
-      if (ipfsHash.length > 200) {
-        throw new Error("Image URL too long");
-      }
-
-      console.log("ipfsHash", ipfsHash);
-
       const toastId = toast.loading("Reporting lost pet...");
       setReportToastId(toastId);
 
-      const bountyAmount = formData.useCUSD
-        ? formData.cusdBounty
-        : formData.ethBounty;
-      const bountyInWei = parseEther(bountyAmount);
+      // Upload image
+      const imageUrl = await uploadToIPFS(file!);
+      const ipfsHash = imageUrl.split("/").pop() || "";
+      if (ipfsHash.length > 200) throw new Error("Image URL too long");
 
-      console.log("[REPORT] Bounty:", {
-        amount: bountyAmount,
-        inWei: bountyInWei.toString(),
-        currency: formData.useCUSD ? "cUSD" : "CELO",
-      });
+      // Prepare bounty data
+      let bountyAmount = "0";
+      let bountyInWei = BigInt(0);
+      let currency = "CELO";
 
-      console.log("[REPORT] Generating Divvi suffix...");
-      const divviSuffix = getDataSuffix({
-        consumer: "0x124D8fad33E0b9fe9F3e1E90D0fC0055aBE8cA8d",
-        providers: [
-          "0x0423189886d7966f0dd7e7d256898daeee625dca",
-          "0xc95876688026be9d6fa7a7c33328bd013effa2bb",
-          "0x5f0a55fad9424ac99429f635dfb9bf20c3360ab8",
-        ],
-      });
-      console.log("[REPORT] Divvi suffix:", divviSuffix);
+      if (formData.useCUSD) {
+        bountyAmount = formData.cusdBounty;
+        bountyInWei = parseEther(bountyAmount);
+        currency = "cUSD";
+      } else if (formData.useGDOLLAR) {
+        bountyAmount = formData.gDollarBounty;
+        bountyInWei = parseEther(bountyAmount);
+        currency = "G$";
+      } else {
+        bountyAmount = formData.ethBounty;
+        bountyInWei = parseEther(bountyAmount);
+      }
 
-      console.log("[REPORT] Encoding function...");
+      // Generate referral tag
+      const divviSuffix = getReferralTag(DIVVI_CONFIG);
+
+      // Encode contract call
       const encodedFunction = encodeFunctionData({
         abi: PetTraceABI.abi,
         functionName: "postLostPet",
@@ -339,66 +346,60 @@ export default function ReportPetForm() {
           formData.contactPhone,
           formData.contactEmail,
           formData.useCUSD ? bountyInWei.toString() : "0",
+          formData.useGDOLLAR ? bountyInWei.toString() : "0",
         ],
       });
-      console.log("[REPORT] Encoded function:", encodedFunction);
 
       const dataWithDivvi = (encodedFunction +
         (divviSuffix.startsWith("0x")
           ? divviSuffix.slice(2)
           : divviSuffix)) as `0x${string}`;
-      console.log("[REPORT] Combined data with Divvi suffix:", dataWithDivvi);
 
-      console.log("[REPORT] Sending transaction...");
+      // Send transaction
       const hash = await walletClient.sendTransaction({
         account: address,
         to: CONTRACT_ADDRESS,
         data: dataWithDivvi,
-        value: formData.useCUSD ? BigInt(0) : bountyInWei,
+        value:
+          formData.useCUSD || formData.useGDOLLAR ? BigInt(0) : bountyInWei,
       });
-      console.log("[REPORT] Transaction sent, hash:", hash);
 
       setReportHash(hash as `0x${string}`);
 
-      console.log("[REPORT] Submitting to Divvi...");
+      // Submit referral
       await submitReferral({
         txHash: hash,
         chainId: chainId || 42220,
       });
-      console.log("[REPORT] Successfully submitted to Divvi");
 
       return hash;
     } catch (error) {
-      console.error("[REPORT ERROR]", error);
       toast.error("Failed to report pet");
       setReportToastId(null);
       throw error;
     }
   };
 
+  // Form submission handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("[SUBMIT] Form submission started");
-
-    if (!validateForm()) {
-      console.log("[SUBMIT] Form validation failed");
-      return;
-    }
+    if (!validateForm()) return;
 
     setIsSubmitting(true);
-    console.log("[SUBMIT] isSubmitting set to true");
 
     try {
       if (formData.useCUSD) {
-        console.log("[SUBMIT] Using cUSD, starting approval flow");
-        await approveCUSD(formData.cusdBounty);
+        await approveToken(CUSD_ADDRESS, formData.cusdBounty, "cUSD");
         return;
       }
 
-      console.log("[SUBMIT] Using CELO, starting report flow");
+      if (formData.useGDOLLAR) {
+        await approveToken(GDOLLAR_ADDRESS, formData.gDollarBounty, "G$");
+        return;
+      }
+
       await reportPet();
     } catch (error) {
-      console.error("[SUBMIT ERROR]", error);
       toast.error("Failed to submit pet report");
       setIsSubmitting(false);
     }
@@ -406,9 +407,7 @@ export default function ReportPetForm() {
 
   // Handle approval confirmation
   useEffect(() => {
-    if (isApprovalConfirmed && formData.useCUSD) {
-      console.log("[APPROVAL CONFIRMED] Proceeding to report pet");
-
+    if (isApprovalConfirmed && (formData.useCUSD || formData.useGDOLLAR)) {
       if (approvalToastId) {
         toast.dismiss(approvalToastId);
         setApprovalToastId(null);
@@ -416,16 +415,13 @@ export default function ReportPetForm() {
 
       const toastId = toast.loading("Reporting lost pet after approval...");
       setReportToastId(toastId);
-
       reportPet();
     }
-  }, [isApprovalConfirmed, formData.useCUSD]);
+  }, [isApprovalConfirmed, formData.useCUSD, formData.useGDOLLAR]);
 
   // Handle successful report
   useEffect(() => {
     if (isReportConfirmed) {
-      console.log("[REPORT CONFIRMED] Transaction successful");
-
       if (reportToastId) {
         toast.dismiss(reportToastId);
         setReportToastId(null);
@@ -433,7 +429,7 @@ export default function ReportPetForm() {
 
       toast.success("Pet reported successfully!");
 
-      console.log("[REPORT CONFIRMED] Resetting form");
+      // Reset form
       setFormData({
         name: "",
         breed: "",
@@ -448,43 +444,33 @@ export default function ReportPetForm() {
         contactEmail: "",
         ethBounty: "0.1",
         cusdBounty: "1",
+        gDollarBounty: "10",
         useCUSD: false,
+        useGDOLLAR: false,
       });
 
-      setTimeout(() => {
-        console.log("[NAVIGATION] Redirecting to /view_reports");
-        router.push("/view_reports");
-      }, 1500);
+      setTimeout(() => router.push("/view_reports"), 1500);
     }
   }, [isReportConfirmed, router]);
 
-  const isLoading = isSubmitting || !!approvalHash || !!reportHash;
-
-  const url = process.env.NEXT_PUBLIC_SELF_ENDPOINT;
-
+  // Initialize Self verification
   useEffect(() => {
     if (!address) return;
     try {
-      const userId = `${address}`;
       const app = new SelfAppBuilder({
         appName: "PetTrace",
         scope: "pet-trace",
-        endpoint: `${url}/api/verify`,
-        userId,
+        endpoint: `${process.env.NEXT_PUBLIC_SELF_ENDPOINT}/api/verify`,
+        userId: `${address}`,
         userIdType: "hex",
       }).build();
-
       setSelfApp(app);
     } catch (error) {
       console.error("Failed to initialize Self app:", error);
     }
   }, [address]);
 
-  const displayToast = (message: string) => {
-    setToastMessage(message);
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 3000);
-  };
+  const isLoading = isSubmitting || !!approvalHash || !!reportHash;
 
   return (
     <div className="max-w-xl mx-auto bg-white p-8 rounded-2xl shadow-lg border border-gray-100">
@@ -525,6 +511,8 @@ export default function ReportPetForm() {
       </div>
 
       <form className="space-y-6" onSubmit={handleSubmit}>
+        {/* Form fields remain the same as before */}
+
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2">
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -760,32 +748,63 @@ export default function ReportPetForm() {
           </div>
         </div>
 
+        {/* Currency Selection */}
         <div className="space-y-2">
-          <div className="flex items-center">
-            <label className="inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.useCUSD}
-                onChange={handleToggleCurrency}
-                className="sr-only peer"
-              />
-              <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-yellow-600"></div>
-              <span className="ml-3 text-sm font-medium">
-                {formData.useCUSD ? "Pay with cUSD" : "Pay with CELO"}
-              </span>
-            </label>
+          <div className="flex items-center space-x-4">
+            <button
+              type="button"
+              onClick={() => handleSelectCurrency("CELO")}
+              className={`px-4 py-2 rounded-lg ${
+                !formData.useCUSD && !formData.useGDOLLAR
+                  ? "bg-yellow-600 text-white"
+                  : "bg-gray-200"
+              }`}
+            >
+              Pay with CELO
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSelectCurrency("CUSD")}
+              className={`px-4 py-2 rounded-lg ${
+                formData.useCUSD ? "bg-yellow-600 text-white" : "bg-gray-200"
+              }`}
+            >
+              Pay with cUSD
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSelectCurrency("G$")}
+              className={`px-4 py-2 rounded-lg ${
+                formData.useGDOLLAR ? "bg-yellow-600 text-white" : "bg-gray-200"
+              }`}
+            >
+              Pay with G$
+            </button>
           </div>
 
+          {/* Bounty Amount Input */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Reward Amount ({formData.useCUSD ? "cUSD" : "CELO"})*
+              Reward Amount (
+              {formData.useCUSD ? "cUSD" : formData.useGDOLLAR ? "G$" : "CELO"}
+              )*
             </label>
             <div className="relative">
               <input
                 type="number"
-                name={formData.useCUSD ? "cusdBounty" : "ethBounty"}
+                name={
+                  formData.useCUSD
+                    ? "cusdBounty"
+                    : formData.useGDOLLAR
+                    ? "gDollarBounty"
+                    : "ethBounty"
+                }
                 value={
-                  formData.useCUSD ? formData.cusdBounty : formData.ethBounty
+                  formData.useCUSD
+                    ? formData.cusdBounty
+                    : formData.useGDOLLAR
+                    ? formData.gDollarBounty
+                    : formData.ethBounty
                 }
                 onChange={handleChange}
                 className="w-full p-3 border border-gray-300 rounded-xl focus:ring-1 focus:ring-yellow-300 focus:outline-none transition"
@@ -794,13 +813,17 @@ export default function ReportPetForm() {
                 required
               />
               <span className="absolute left-3 top-2 text-gray-500">
-                {formData.useCUSD ? "cUSD" : "CELO"}
+                {formData.useCUSD
+                  ? "cUSD"
+                  : formData.useGDOLLAR
+                  ? "G$"
+                  : "CELO"}
               </span>
             </div>
           </div>
         </div>
 
-        <button
+        {/* <button
           type="submit"
           disabled={isLoading}
           className={`w-full py-3 mt-4 rounded-xl font-semibold transition ${
@@ -810,7 +833,8 @@ export default function ReportPetForm() {
           }`}
         >
           {isLoading ? "Processing..." : "Report Lost Pet"}
-        </button>
+        </button> */}
+
         <button
           type="submit"
           disabled={isLoading || !isVerified}
