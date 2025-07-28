@@ -41,7 +41,7 @@ export default function HeroBanner() {
           <div className="mt-6 flex items-center justify-center md:justify-start gap-2 text-sm text-gray-500">
             <div className="flex items-center">
               <span className="h-2 w-2 rounded-full bg-green-400 mr-2"></span>
-              Powered by Base
+              Powered by Celo
             </div>
           </div>
         </div>
