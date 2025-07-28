@@ -272,56 +272,6 @@ contract PetTrace {
      * @notice Claim bounty for found pet
      * @dev Can only be called by finder after confirmation
      */
-    // function claimBounty1(
-    //     uint256 petId
-    // ) external petExists(petId) nonReentrant {
-    //     Pet storage pet = pets[petId];
-    //     require(pet.isFound, "Pet not found");
-    //     require(msg.sender == pet.finder, "Not finder");
-    //     require(pet.celoBounty > 0 || pet.cUSDBounty > 0, "No bounty");
-
-    //     uint256 celoAmount = pet.celoBounty;
-    //     uint256 cUSDAmount = pet.cUSDBounty;
-    //     uint256 gDollarAmount = pet.gDollarBounty;
-
-    //     // Reset state before transfers
-    //     pet.celoBounty = 0;
-    //     pet.cUSDBounty = 0;
-    //     pet.gDollarBounty = 0;
-    //     escrowedCUSD[petId] = 0;
-    //     escrowedGDOLLAR[petId] = 0;
-
-    //     // Transfer funds
-    //     if (celoAmount > 0) {
-    //         payable(msg.sender).transfer(celoAmount);
-    //     }
-    //     if (cUSDAmount > 0) {
-    //         require(
-    //             IERC20(CUSD_ADDRESS).transfer(msg.sender, cUSDAmount),
-    //             "cUSD transfer failed"
-    //         );
-    //     }
-
-    //     if (gDollarAmount > 0) {
-    //         require(
-    //             IERC20(GDOLLAR_ADDRESS).transferAndCall(
-    //                 msg.sender,
-    //                 gDollarAmount,
-    //                 ""
-    //             ),
-    //             "G$ transfer failed"
-    //         );
-    //         escrowedGDOLLAR[petId] = 0;
-    //     }
-
-    //     emit BountyClaimed(
-    //         petId,
-    //         msg.sender,
-    //         celoAmount,
-    //         cUSDAmount,
-    //         gDollarAmount
-    //     );
-    // }
 
     function claimBounty(uint256 petId) external petExists(petId) nonReentrant {
         Pet storage pet = pets[petId];
@@ -353,18 +303,14 @@ contract PetTrace {
                 "cUSD transfer failed"
             );
         }
+        // Transfer G$ (ERC-677) - Updated!
         if (gDollarAmount > 0) {
             require(
-                escrowedGDOLLAR[petId] >= gDollarAmount,
-                "Insufficient G$ escrow"
-            );
-            require(
-                IERC20(GDOLLAR_ADDRESS).balanceOf(address(this)) >=
-                    gDollarAmount,
-                "Insufficient contract G$ balance"
-            );
-            require(
-                IERC20(GDOLLAR_ADDRESS).transfer(msg.sender, gDollarAmount),
+                IERC677(GDOLLAR_ADDRESS).transferAndCall(
+                    msg.sender, // Recipient
+                    gDollarAmount, // Amount
+                    "" // Optional data (empty for simple transfers)
+                ),
                 "G$ transfer failed"
             );
         }

@@ -30,7 +30,7 @@ interface Pet {
 }
 
 export default function Home() {
-  const CONTRACT_ADDRESS = "0x46Ec5416f003C20Ef386ffaC4D980D91102a3Be5";
+  const CONTRACT_ADDRESS = "0xAa58D54b0F00418C089F5C216EdE304930C9Bc57";
   const [lostPets, setLostPets] = useState<Pet[]>([]);
 
   const { data, error, isLoading, isError, isSuccess } = useReadContract({

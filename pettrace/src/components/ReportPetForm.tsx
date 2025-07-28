@@ -19,7 +19,7 @@ import SelfQRcodeWrapper, {
 } from "@selfxyz/qrcode";
 
 // Contract addresses
-const CONTRACT_ADDRESS = "0x46Ec5416f003C20Ef386ffaC4D980D91102a3Be5";
+const CONTRACT_ADDRESS = "0xAa58D54b0F00418C089F5C216EdE304930C9Bc57";
 const CUSD_ADDRESS = "0x765DE816845861e75A25fCA122bb6898B8B1282a";
 const GDOLLAR_ADDRESS = "0x62B8B11039FcfE5aB0C56E502b1C372A3d2a9c7A";
 
@@ -823,7 +823,7 @@ export default function ReportPetForm() {
           </div>
         </div>
 
-        {/* <button
+        <button
           type="submit"
           disabled={isLoading}
           className={`w-full py-3 mt-4 rounded-xl font-semibold transition ${
@@ -833,7 +833,7 @@ export default function ReportPetForm() {
           }`}
         >
           {isLoading ? "Processing..." : "Report Lost Pet"}
-        </button> */}
+        </button>
 
         <button
           type="submit"
