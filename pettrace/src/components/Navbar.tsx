@@ -1,10 +1,22 @@
-import { FaHeart, FaUser, FaBars } from "react-icons/fa";
-import { HiOutlineLocationMarker } from "react-icons/hi";
+"use client";
+import { useEffect, useState } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-
+import { injected } from "wagmi/connectors";
+import { useAccount, useConnect } from "wagmi";
 import Link from "next/link";
 
 export default function Navbar() {
+  const [isMiniPay, setIsMiniPay] = useState(false);
+  const { connect } = useConnect();
+
+  // Detect MiniPay and auto-connect
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.ethereum?.isMiniPay) {
+      setIsMiniPay(true);
+      connect({ connector: injected({ target: "metaMask" }) });
+    }
+  }, [connect]);
+
   return (
     <header className="bg-white shadow-md px-6 py-4 flex items-center justify-between">
       <div className="flex items-center gap-4">
@@ -18,8 +30,9 @@ export default function Navbar() {
           <span>Харків</span>
         </div> */}
       </div>
-
-      <ConnectButton />
+      {/* Only show ConnectButton if not in MiniPay */}
+      {!isMiniPay && <ConnectButton />}
+      {/* <ConnectButton /> */}
     </header>
   );
 }

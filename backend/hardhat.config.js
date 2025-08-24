@@ -19,6 +19,11 @@ module.exports = {
       accounts: [process.env.PRIVATE_KEY],
       chainId: 44787,
     },
+    celo_alfajores: {
+      url: `https://forno.celo-sepolia.celo-testnet.org`,
+      accounts: [process.env.PRIVATE_KEY],
+      chainId: 11142220,
+    },
     celo_mainnet: {
       url: `https://forno.celo.org`,
       accounts: [process.env.PRIVATE_KEY],

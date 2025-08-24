@@ -64,6 +64,7 @@ export default function ReportPetForm() {
   const [universalLink, setUniversalLink] = useState("");
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const [formData, setFormData] = useState<PetFormData>({
     name: "",
@@ -837,7 +838,7 @@ export default function ReportPetForm() {
                 }
                 onChange={handleChange}
                 className="w-full p-3 border border-gray-300 rounded-xl focus:ring-1 focus:ring-yellow-300 focus:outline-none transition"
-                min="0.1"
+                min="0.001"
                 step="0.01"
                 required
               />
