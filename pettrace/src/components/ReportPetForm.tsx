@@ -13,10 +13,12 @@ import { toast } from "react-hot-toast";
 import PetTraceABI from "../../abi.json";
 import { erc20Abi } from "viem";
 import { getReferralTag, submitReferral } from "@divvi/referral-sdk";
-import SelfQRcodeWrapper, {
+import {
+  SelfQRcodeWrapper,
   SelfAppBuilder,
   type SelfApp,
 } from "@selfxyz/qrcode";
+import { getUniversalLink } from "@selfxyz/core";
 
 // Contract addresses
 const CONTRACT_ADDRESS = "0xAa58D54b0F00418C089F5C216EdE304930C9Bc57";
@@ -59,6 +61,9 @@ export default function ReportPetForm() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [universalLink, setUniversalLink] = useState("");
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
 
   const [formData, setFormData] = useState<PetFormData>({
     name: "",
@@ -453,22 +458,43 @@ export default function ReportPetForm() {
     }
   }, [isReportConfirmed, router]);
 
-  // Initialize Self verification
   useEffect(() => {
     if (!address) return;
-    try {
-      const app = new SelfAppBuilder({
-        appName: "PetTrace",
-        scope: "pet-trace",
-        endpoint: `${process.env.NEXT_PUBLIC_SELF_ENDPOINT}/api/verify`,
-        userId: `${address}`,
-        userIdType: "hex",
-      }).build();
-      setSelfApp(app);
-    } catch (error) {
-      console.error("Failed to initialize Self app:", error);
-    }
-  }, [address]);
+
+    const initializeSelfApp = async () => {
+      try {
+        const app = new SelfAppBuilder({
+          version: 2,
+          appName: process.env.NEXT_PUBLIC_SELF_APP_NAME || "Self Workshop",
+          scope: process.env.NEXT_PUBLIC_SELF_SCOPE || "self-workshop",
+          endpoint: `${process.env.NEXT_PUBLIC_SELF_ENDPOINT}`,
+          logoBase64: "https://i.postimg.cc/mrmVf9hm/self.png",
+          userId: `${address}`,
+          endpointType: "staging_https",
+          userIdType: "hex",
+          userDefinedData: "Bonjour Cannes!",
+          disclosures: {
+            minimumAge: 18,
+            nationality: true,
+            gender: true,
+          },
+        }).build();
+
+        setSelfApp(app);
+        setUniversalLink(getUniversalLink(app));
+      } catch (error) {
+        console.error("Failed to initialize Self app:", error);
+      }
+    };
+
+    initializeSelfApp();
+  }, [address]); // Make sure address is in the dependency array
+
+  const displayToast = (message: string) => {
+    setToastMessage(message);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
+  };
 
   const isLoading = isSubmitting || !!approvalHash || !!reportHash;
 
@@ -493,6 +519,9 @@ export default function ReportPetForm() {
               onSuccess={() => {
                 setIsVerified(true);
                 toast.success("Identity verified successfully!");
+              }}
+              onError={() => {
+                displayToast("Error: Failed to verify identity");
               }}
               size={150}
             />
@@ -822,18 +851,6 @@ export default function ReportPetForm() {
             </div>
           </div>
         </div>
-
-        <button
-          type="submit"
-          disabled={isLoading}
-          className={`w-full py-3 mt-4 rounded-xl font-semibold transition ${
-            isLoading
-              ? "bg-gray-300 text-gray-600 cursor-not-allowed"
-              : "bg-yellow-600 text-white hover:bg-yellow-700"
-          }`}
-        >
-          {isLoading ? "Processing..." : "Report Lost Pet"}
-        </button>
 
         <button
           type="submit"
