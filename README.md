@@ -13,11 +13,12 @@
 ## **Features**
 
 - 🐾 **Lost Pet Posting** – Users can register lost pets with images, descriptions, and last known locations.
-- 🎯 **Bounty System** – Attach a bounty in CELO or cUSD to encourage community help.
+- 🎯 **Bounty System** – Attach a bounty in CELO, cUSD or G$ to encourage community help.
 - ✅ **Recovery Confirmation** – Mark pets as found and release bounties securely via smart contracts.
 - 🔐 **Owner Contact Info** – Easily contact pet owners with name, phone, and email details.
 - 🌍 **Celo Integration** – Built on Celo mainnet for low-cost and fast transactions.
 - 🔒 **Identity Verification** – Integrated with Self for secure identity verification before posting.
+- ✅ **MiniPay Integration** - Users can connect their MiniPay wallet within the PetTrace app.
 - 📱 **QR Code Verification** – Users can verify their identity by scanning a QR code with the Self app.
 
 ---
@@ -73,11 +74,16 @@ PRIVATE_KEY=your_private_key
 ### Frontend (`pettrace/.env`)
 
 ```env
-NEXT_PUBLIC_CONTRACT_ADDRESS=your_smart_contract_address
-NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID=your_wallet_connect_project_id
-NEXT_PUBLIC_APP_NAME=your_project_name
-NEXT_PUBLIC_SELF_ENDPOINT=your_self_verification_endpoint
-NEXT_PUBLIC_SELF_ENABLE_MOCK_PASSPORT=true/false # for development
+NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID= YOUR_NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID
+NEXT_PUBLIC_APP_NAME= YOUR_NEXT_PUBLIC_APP_NAME
+
+NEXT_PUBLIC_SELF_ENDPOINT= YOUR_NEXT_PUBLIC_SELF_ENDPOINT
+# NEXT_PUBLIC_SELF_ENDPOINT= # has to be a public endpoint, not localhost (you can use ngrok to get a public endpoint for local development)
+# Example: NEXT_PUBLIC_SELF_ENDPOINT=https://123.ngrok-free.app/api/verify
+
+NEXT_PUBLIC_SELF_ENABLE_MOCK_PASSPORT= "true / false"
+NEXT_PUBLIC_SELF_APP_NAME="YOUR_NEXT_PUBLIC_SELF_APP_NAME"
+NEXT_PUBLIC_SELF_SCOPE="YOUR_NEXT_PUBLIC_SELF_SCOPE"
 ```
 
 ---
@@ -169,5 +175,6 @@ This update:
 4. Updates the "How It Works" section to include identity verification
 5. Adds Self to the Tech Stack section
 6. Maintains all the existing project information while adding the new details
+7. Users can connect their MiniPay wallet within the PetTrace app.
 
 The integration is presented as a security feature that helps prevent spam and ensure accountability in the system.
