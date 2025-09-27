@@ -11,6 +11,7 @@
   "dependencies": {
     "@divvi/referral-sdk": "^2.2.0",
     "@rainbow-me/rainbowkit": "^2.2.8",
+    "@react-google-maps/api": "^2.20.7",
     "@selfxyz/common": "^0.0.5",
     "@selfxyz/core": "^1.0.5-beta.1",
     "@selfxyz/qrcode": "^1.0.10-beta.1",
@@ -21,6 +22,7 @@
     "react-dom": "^19.0.0",
     "react-hot-toast": "^2.5.2",
     "react-icons": "^5.5.0",
+    "use-places-autocomplete": "^4.0.1",
     "uuid": "^11.1.0",
     "viem": "~2.32.1",
     "wagmi": "^2.16.0"

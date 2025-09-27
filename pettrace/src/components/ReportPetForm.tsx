@@ -13,6 +13,16 @@ import { toast } from "react-hot-toast";
 import PetTraceABI from "../../abi.json";
 import { erc20Abi } from "viem";
 import { getReferralTag, submitReferral } from "@divvi/referral-sdk";
+import usePlacesAutocomplete, {
+  getGeocode,
+  getLatLng,
+} from "use-places-autocomplete";
+import {
+  useLoadScript,
+  GoogleMap,
+  MarkerF,
+  CircleF,
+} from "@react-google-maps/api";
 import {
   SelfQRcodeWrapper,
   SelfAppBuilder,
@@ -21,7 +31,7 @@ import {
 import { getUniversalLink } from "@selfxyz/core";
 
 // Contract addresses
-const CONTRACT_ADDRESS = "0xAa58D54b0F00418C089F5C216EdE304930C9Bc57";
+const CONTRACT_ADDRESS = "0xC426c84e5b0eaa7Ed207854e99F5559981aa07F0";
 const CUSD_ADDRESS = "0x765DE816845861e75A25fCA122bb6898B8B1282a";
 const GDOLLAR_ADDRESS = "0x62B8B11039FcfE5aB0C56E502b1C372A3d2a9c7A";
 
@@ -83,6 +93,17 @@ export default function ReportPetForm() {
     gDollarBounty: "10", // Default G$ bounty
     useCUSD: false,
     useGDOLLAR: false,
+  });
+
+  const {
+    ready,
+    value,
+    suggestions: { status, data },
+    setValue,
+    clearSuggestions,
+  } = usePlacesAutocomplete({
+    debounce: 300,
+    cache: 86400,
   });
 
   // Transaction hooks
@@ -482,7 +503,7 @@ export default function ReportPetForm() {
         }).build();
 
         setSelfApp(app);
-        setUniversalLink(getUniversalLink(app));
+        // setUniversalLink(getUniversalLink(app));
       } catch (error) {
         console.error("Failed to initialize Self app:", error);
       }
@@ -498,6 +519,17 @@ export default function ReportPetForm() {
   };
 
   const isLoading = isSubmitting || !!approvalHash || !!reportHash;
+
+  const { isLoaded } = useLoadScript({
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY as string,
+    libraries: ["places"],
+  });
+
+  // useEffect(() => {
+  //   console.log("Places Status:", status, "Data:", data);
+  // }, [status, data]);
+
+  // if (!isLoaded) return <p>Loading...</p>;
 
   return (
     <div className="max-w-xl mx-auto bg-white p-8 rounded-2xl shadow-lg border border-gray-100">
@@ -648,6 +680,71 @@ export default function ReportPetForm() {
               className="w-full p-3 border border-gray-300 rounded-xl focus:ring-1 focus:ring-yellow-300 focus:outline-none transition"
               required
             />
+          </div>
+
+          {/* Last Seen Location with Autocomplete */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Last Seen Location*
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                name="lastSeenLocation"
+                value={formData.lastSeenLocation}
+                onChange={(e) => {
+                  setValue(e.target.value); // update places hook
+                  setFormData({
+                    ...formData,
+                    lastSeenLocation: e.target.value,
+                  });
+                }}
+                placeholder="Enter last seen address"
+                className="w-full p-3 border border-gray-300 rounded-xl focus:ring-1 focus:ring-yellow-300 focus:outline-none transition"
+                required
+              />
+
+              {/* Suggestions */}
+              {status === "OK" && (
+                <ul className="absolute z-10 bg-white border border-gray-200 rounded-lg mt-1 w-full max-h-60 overflow-y-auto shadow-lg">
+                  {data.map((suggestion) => {
+                    const {
+                      place_id,
+                      structured_formatting: { main_text, secondary_text },
+                      description,
+                    } = suggestion;
+
+                    return (
+                      <li
+                        key={place_id}
+                        className="p-2 hover:bg-gray-100 cursor-pointer"
+                        onClick={() => {
+                          setValue(description, false);
+                          clearSuggestions();
+                          setFormData({
+                            ...formData,
+                            lastSeenLocation: description,
+                          });
+
+                          // Optionally get lat/lng for map usage
+                          getGeocode({ address: description }).then(
+                            (results) => {
+                              const { lat, lng } = getLatLng(results[0]);
+                              console.log("Lat/Lng:", lat, lng);
+                            }
+                          );
+                        }}
+                      >
+                        <strong>{main_text}</strong>{" "}
+                        <small className="text-gray-500">
+                          {secondary_text}
+                        </small>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
           </div>
 
           <div>
@@ -867,6 +964,23 @@ export default function ReportPetForm() {
             : !isVerified
             ? "Complete Verification First"
             : "Report Lost Pet"}
+        </button>
+
+        <button
+          type="submit"
+          // disabled={isLoading || !isVerified}
+          className={`w-full py-3 mt-4 rounded-xl font-semibold transition ${
+            isLoading || !isVerified
+              ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+              : "bg-yellow-600 text-white hover:bg-yellow-700"
+          }`}
+        >
+          Report
+          {/* {isLoading
+            ? "Processing..."
+            : !isVerified
+            ? "Complete Verification First"
+            : "Report Lost Pet"} */}
         </button>
       </form>
     </div>
