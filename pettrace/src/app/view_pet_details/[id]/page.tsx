@@ -194,52 +194,6 @@ export default function PetDetails() {
     return `${formattedAmount} ${currency}`;
   };
 
-  const handleClaimGdBounty1 = async () => {
-    if (!walletClient || !publicClient || !address) {
-      toast.error("Wallet not connected");
-      return;
-    }
-
-    try {
-      // Convert bounty amount (G$ uses 2 decimals)
-      const gdBounty = BigInt(formattedPet.gDollarBounty);
-      console.log("Raw G$ bounty from contract:", gdBounty);
-
-      // Validate
-      if (gdBounty <= BigInt(0)) throw new Error("No G$ bounty available");
-      if (formattedPet.finder.toLowerCase() !== address.toLowerCase()) {
-        throw new Error("Only the finder can claim this bounty");
-      }
-      if (!formattedPet.isFound) {
-        throw new Error("Pet must be confirmed as found");
-      }
-
-      toast.loading(`Claiming ${Number(gdBounty) / 100} G$...`);
-
-      // Use the PetTrace contract's claimBounty function instead
-      const { request } = await publicClient.simulateContract({
-        account: address,
-        address: CONTRACT_ADDRESS, // Your PetTrace contract
-        abi: PetTraceABI.abi,
-        functionName: "claimBounty",
-        args: [petId],
-      });
-
-      const hash = await walletClient.writeContract(request);
-      console.log("Claim transaction hash:", hash);
-
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      if (receipt.status === "success") {
-        toast.success(`Successfully claimed ${Number(gdBounty) / 100} G$!`);
-        await refetchPetData();
-      }
-    } catch (error) {
-      console.error("G$ claim error:", error);
-      let errorMsg = "Failed to claim G$ bounty";
-      toast.error(errorMsg);
-    }
-  };
-
   const handleClaimGdBounty = async () => {
     if (!walletClient || !publicClient || !address) {
       toast.error("Wallet not connected");
@@ -344,6 +298,68 @@ export default function PetDetails() {
           : divviSuffix)) as `0x${string}`;
 
       console.log("Sending handleClaim transaction...");
+
+      const hash = await walletClient.sendTransaction({
+        account: address,
+        to: CONTRACT_ADDRESS,
+        data: dataWithDivvi,
+      });
+
+      console.log("Transaction hash:", hash);
+
+      setTxHash(hash);
+      toast.success("Bounty claim submitted!");
+      await submitReferral({ txHash: hash, chainId: 42220 });
+      console.log("Successfully submitted to Divvi");
+
+      await refetchPetData();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to claim bounty"
+      );
+      console.log(error);
+    } finally {
+      setIsClaimingBounty(false);
+      toast.dismiss(toastId);
+    }
+  };
+
+  const handleCancelBounty = async () => {
+    if (!isConnected || !walletClient) {
+      toast.error("Please connect your wallet first");
+      return;
+    }
+
+    if (
+      formattedPet.celoBounty <= 0 &&
+      formattedPet.cUSDBounty <= 0 &&
+      formattedPet.gDollarBounty <= 0
+    ) {
+      toast.error("No bounty available to claim");
+      return;
+    }
+
+    setIsClaimingBounty(true);
+    const toastId = toast.loading("Processing bounty claim...");
+
+    try {
+      const divviSuffix = getReferralTag(DIVVI_CONFIG);
+      console.log("Divvi suffix generated:", divviSuffix);
+
+      const encodedFunction = encodeFunctionData({
+        abi: PetTraceABI.abi,
+        functionName: "cancelAndRefund",
+        args: [petId],
+      });
+
+      console.log("Encoded function data:", encodedFunction);
+
+      const dataWithDivvi = (encodedFunction +
+        (divviSuffix.startsWith("0x")
+          ? divviSuffix.slice(2)
+          : divviSuffix)) as `0x${string}`;
+
+      console.log("Sending handleCancel transaction...");
 
       const hash = await walletClient.sendTransaction({
         account: address,
@@ -776,13 +792,27 @@ export default function PetDetails() {
                     address?.toLowerCase() &&
                     formattedPet.finder &&
                     !formattedPet.ownerConfirmed && (
-                      <button
-                        onClick={handleConfirmFoundByOwner}
-                        disabled={isConfirmingFound}
-                        className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 px-6 rounded-xl font-medium transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
-                      >
-                        {isConfirmingFound ? "Processing..." : "Confirm Found"}
-                      </button>
+                      <>
+                        <button
+                          onClick={handleConfirmFoundByOwner}
+                          disabled={isConfirmingFound}
+                          className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 px-6 rounded-xl font-medium transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
+                        >
+                          {isConfirmingFound
+                            ? "Processing..."
+                            : "Confirm Found"}
+                        </button>
+
+                        <button
+                          onClick={handleCancelBounty}
+                          disabled={isConfirmingFound}
+                          className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 px-6 rounded-xl font-medium transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
+                        >
+                          {isConfirmingFound
+                            ? "Processing..."
+                            : "Cancel bounty"}
+                        </button>
+                      </>
                     )}
                 </>
               )}

@@ -88,7 +88,7 @@ export default function ReportPetForm() {
     contactName: "",
     contactPhone: "",
     contactEmail: "",
-    ethBounty: "0.1",
+    ethBounty: "0.001",
     cusdBounty: "1",
     gDollarBounty: "10", // Default G$ bounty
     useCUSD: false,
@@ -469,7 +469,7 @@ export default function ReportPetForm() {
         contactName: "",
         contactPhone: "",
         contactEmail: "",
-        ethBounty: "0.1",
+        ethBounty: "0.001",
         cusdBounty: "1",
         gDollarBounty: "10",
         useCUSD: false,
@@ -662,20 +662,6 @@ export default function ReportPetForm() {
               type="datetime-local"
               name="dateTimeLost"
               value={formData.dateTimeLost}
-              onChange={handleChange}
-              className="w-full p-3 border border-gray-300 rounded-xl focus:ring-1 focus:ring-yellow-300 focus:outline-none transition"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Last Seen Location*
-            </label>
-            <input
-              type="text"
-              name="lastSeenLocation"
-              value={formData.lastSeenLocation}
               onChange={handleChange}
               className="w-full p-3 border border-gray-300 rounded-xl focus:ring-1 focus:ring-yellow-300 focus:outline-none transition"
               required
@@ -936,7 +922,7 @@ export default function ReportPetForm() {
                 onChange={handleChange}
                 className="w-full p-3 border border-gray-300 rounded-xl focus:ring-1 focus:ring-yellow-300 focus:outline-none transition"
                 min="0.001"
-                step="0.01"
+                step="0.001"
                 required
               />
               <span className="absolute left-3 top-2 text-gray-500">
