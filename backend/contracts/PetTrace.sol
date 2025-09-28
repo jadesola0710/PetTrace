@@ -54,6 +54,12 @@ contract PetTrace {
     mapping(uint256 => uint256) public escrowedGDOLLAR;
     mapping(uint256 => uint256) public postTime;
 
+    enum PetStatus {
+        Active, // Pet reported lost, bounty active
+        Found, // Pet found and confirmed
+        Cancelled // Pet report cancelled and bounty refunded
+    }
+
     struct Pet {
         uint256 id;
         address payable owner;
@@ -72,7 +78,7 @@ contract PetTrace {
         uint128 celoBounty;
         uint128 cUSDBounty;
         uint128 gDollarBounty;
-        bool isFound;
+        PetStatus status;
         bool ownerConfirmed;
         bool finderConfirmed;
         address finder;
@@ -216,7 +222,7 @@ contract PetTrace {
             celoBounty: uint128(msg.value),
             cUSDBounty: cUSDBounty,
             gDollarBounty: gDollarBounty,
-            isFound: false,
+            status: PetStatus.Active,
             ownerConfirmed: false,
             finderConfirmed: false,
             finder: address(0)
@@ -233,14 +239,15 @@ contract PetTrace {
      */
     function markAsFound(uint256 petId) external petExists(petId) nonReentrant {
         Pet storage pet = pets[petId];
-        require(!pet.isFound, "Already found");
+        require(pet.status == PetStatus.Active, "Pet not active");
+
         require(msg.sender != pet.owner, "Owner cannot be finder");
 
         pet.finder = msg.sender;
         pet.finderConfirmed = true;
 
         if (pet.ownerConfirmed) {
-            pet.isFound = true;
+            pet.status = PetStatus.Found;
             emit PetFound(petId, msg.sender);
         }
 
@@ -255,13 +262,14 @@ contract PetTrace {
         uint256 petId
     ) external onlyPetOwner(petId) nonReentrant {
         Pet storage pet = pets[petId];
-        require(!pet.isFound, "Already found");
+        require(pet.status == PetStatus.Active, "Pet not active");
         require(pet.finder != address(0), "No finder assigned");
 
         pet.ownerConfirmed = true;
 
         if (pet.finderConfirmed) {
-            pet.isFound = true;
+            pet.status = PetStatus.Found;
+
             emit PetFound(petId, pet.finder);
         }
 
@@ -275,8 +283,9 @@ contract PetTrace {
 
     function claimBounty(uint256 petId) external petExists(petId) nonReentrant {
         Pet storage pet = pets[petId];
-        require(pet.isFound, "Pet not found");
+        require(pet.status == PetStatus.Found, "Pet not found yet");
         require(msg.sender == pet.finder, "Not finder");
+
         require(
             pet.celoBounty > 0 || pet.cUSDBounty > 0 || pet.gDollarBounty > 0,
             "No bounty"
@@ -332,7 +341,7 @@ contract PetTrace {
         uint256 petId
     ) external onlyPetOwner(petId) nonReentrant {
         Pet storage pet = pets[petId];
-        require(!pet.isFound, "Pet already found");
+        require(pet.status == PetStatus.Active, "Pet not active");
         require(pet.finder == address(0), "Finder already assigned");
 
         uint256 celoAmount = pet.celoBounty;
@@ -363,6 +372,8 @@ contract PetTrace {
                 "G$ refund failed"
             );
         }
+
+        pet.status = PetStatus.Cancelled;
 
         emit BountyRefunded(
             petId,
@@ -413,7 +424,8 @@ contract PetTrace {
 
         // Count lost pets in range
         for (uint256 i = startIndex; i < endIndex; i++) {
-            if (!pets[i].isFound) totalLost++;
+            // if (!pets[i].isFound) totalLost++;
+            if (pets[i].status == PetStatus.Active) totalLost++;
         }
 
         // Initialize and populate array
@@ -421,7 +433,7 @@ contract PetTrace {
         uint256 currentIndex = 0;
 
         for (uint256 i = startIndex; i < endIndex; i++) {
-            if (!pets[i].isFound) {
+            if (pets[i].status == PetStatus.Active) {
                 ids[currentIndex] = i;
                 currentIndex++;
             }
@@ -460,7 +472,7 @@ contract PetTrace {
             uint128,
             uint128,
             uint128,
-            bool,
+            PetStatus,
             bool,
             bool,
             address
@@ -485,7 +497,7 @@ contract PetTrace {
             pet.celoBounty,
             pet.cUSDBounty,
             pet.gDollarBounty,
-            pet.isFound,
+            pet.status,
             pet.ownerConfirmed,
             pet.finderConfirmed,
             pet.finder
@@ -505,7 +517,8 @@ contract PetTrace {
 
         // Count lost pets
         for (uint256 i = 0; i < nextPetId; i++) {
-            if (!pets[i].isFound) count++;
+            // if (!pets[i].isFound) count++;
+            if (pets[i].status == PetStatus.Active) count++;
         }
 
         // Initialize arrays
@@ -515,7 +528,7 @@ contract PetTrace {
 
         // Populate arrays
         for (uint256 i = 0; i < nextPetId; i++) {
-            if (!pets[i].isFound) {
+            if (pets[i].status == PetStatus.Active) {
                 ids[index] = i;
                 lostPets[index] = pets[i];
                 index++;
@@ -525,6 +538,14 @@ contract PetTrace {
         return (ids, lostPets);
     }
 
+    function getAllPets() public view returns (Pet[] memory) {
+        Pet[] memory result = new Pet[](nextPetId);
+        for (uint256 i = 0; i < nextPetId; i++) {
+            result[i] = pets[i];
+        }
+        return result;
+    }
+
     /**
      * @notice Get count of lost pets
      * @return Number of pets not found
@@ -532,7 +553,7 @@ contract PetTrace {
     function getLostPetsCount() public view returns (uint256) {
         uint256 counter = 0;
         for (uint256 i = 0; i < nextPetId; i++) {
-            if (!pets[i].isFound) counter++;
+            if (pets[i].status == PetStatus.Active) counter++;
         }
         return counter;
     }

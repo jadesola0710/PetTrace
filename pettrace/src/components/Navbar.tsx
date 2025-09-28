@@ -25,14 +25,17 @@ export default function Navbar() {
             🐾PetTrace
           </span>
         </Link>
-        {/* <div className="flex items-center gap-1 text-gray-600">
-          <HiOutlineLocationMarker className="w-5 h-5" />
-          <span>Харків</span>
-        </div> */}
       </div>
-      {/* Only show ConnectButton if not in MiniPay */}
-      {!isMiniPay && <ConnectButton />}
-      {/* <ConnectButton /> */}
+      <div className="flex items-center">
+        <div className="border border-yellow-600 text-yellow-600 hover:bg-yellow-50 px-6 py-3 mr-4 rounded-xl font-medium transition-colors shadow-sm flex items-center justify-center">
+          <Link href="/view_reports">
+            <span>View Lost Pets</span>
+          </Link>
+        </div>
+        {/* Only show ConnectButton if not in MiniPay */}
+        {!isMiniPay && <ConnectButton />}
+        {/* <ConnectButton /> */}
+      </div>
     </header>
   );
 }
