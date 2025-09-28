@@ -84,6 +84,7 @@ NEXT_PUBLIC_SELF_ENDPOINT= YOUR_NEXT_PUBLIC_SELF_ENDPOINT
 NEXT_PUBLIC_SELF_ENABLE_MOCK_PASSPORT= "true / false"
 NEXT_PUBLIC_SELF_APP_NAME="YOUR_NEXT_PUBLIC_SELF_APP_NAME"
 NEXT_PUBLIC_SELF_SCOPE="YOUR_NEXT_PUBLIC_SELF_SCOPE"
+NEXT_PUBLIC_GOOGLE_MAPS_KEY = YOUR_NEXT_PUBLIC_GOOGLE_MAPS_KEY
 ```
 
 ---
@@ -118,7 +119,7 @@ Deployed to **Celo mainnet**:
 
 | Contract | Address (Mainnet)                            |
 | -------- | -------------------------------------------- |
-| PetTrace | `0x850388b814B69ec4Da3cB3ac7637768adf9A0B00` |
+| PetTrace | `0xCEAb4FD4C1f488938d81e8B6A519951Eda17a318` |
 
 ---
 

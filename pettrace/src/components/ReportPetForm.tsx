@@ -952,9 +952,8 @@ export default function ReportPetForm() {
             : "Report Lost Pet"}
         </button>
 
-        <button
+        {/* <button
           type="submit"
-          // disabled={isLoading || !isVerified}
           className={`w-full py-3 mt-4 rounded-xl font-semibold transition ${
             isLoading || !isVerified
               ? "bg-gray-300 text-gray-600 cursor-not-allowed"
@@ -962,12 +961,7 @@ export default function ReportPetForm() {
           }`}
         >
           Report
-          {/* {isLoading
-            ? "Processing..."
-            : !isVerified
-            ? "Complete Verification First"
-            : "Report Lost Pet"} */}
-        </button>
+        </button> */}
       </form>
     </div>
   );

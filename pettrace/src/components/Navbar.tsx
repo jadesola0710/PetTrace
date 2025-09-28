@@ -27,11 +27,11 @@ export default function Navbar() {
         </Link>
       </div>
       <div className="flex items-center">
-        <div className="border border-yellow-600 text-yellow-600 hover:bg-yellow-50 px-6 py-3 mr-4 rounded-xl font-medium transition-colors shadow-sm flex items-center justify-center">
-          <Link href="/view_reports">
+        <Link href="/view_reports">
+          <div className="border border-yellow-600 text-yellow-600 hover:bg-yellow-50 px-6 py-3 mr-4 rounded-xl font-medium transition-colors shadow-sm flex items-center justify-center">
             <span>View Lost Pets</span>
-          </Link>
-        </div>
+          </div>
+        </Link>
         {/* Only show ConnectButton if not in MiniPay */}
         {!isMiniPay && <ConnectButton />}
         {/* <ConnectButton /> */}
