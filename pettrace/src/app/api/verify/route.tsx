@@ -1,16 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  countries,
-  Country3LetterCode,
-  SelfAppDisclosureConfig,
-} from "@selfxyz/common";
-import {
-  countryCodes,
   SelfBackendVerifier,
   AllIds,
   DefaultConfigStore,
   VerificationConfig,
 } from "@selfxyz/core";
+
+const disclosures_config: VerificationConfig = {
+  excludedCountries: [],
+  ofac: false,
+  minimumAge: 18,
+};
+
+const configStore = new DefaultConfigStore(disclosures_config);
+
+const selfBackendVerifier = new SelfBackendVerifier(
+  "pet-trace",
+  process.env.NEXT_PUBLIC_SELF_ENDPOINT || "",
+  true,
+  AllIds,
+  configStore,
+  "hex"
+);
 
 export async function POST(req: NextRequest) {
   console.log("Received request");
@@ -25,25 +36,9 @@ export async function POST(req: NextRequest) {
           message:
             "Proof, publicSignals, attestationId and userContextData are required",
         },
-        { status: 400 }
+        { status: 200 }
       );
     }
-
-    const disclosures_config: VerificationConfig = {
-      excludedCountries: [],
-      ofac: false,
-      minimumAge: 18,
-    };
-    const configStore = new DefaultConfigStore(disclosures_config);
-
-    const selfBackendVerifier = new SelfBackendVerifier(
-      "pet-trace",
-      process.env.NEXT_PUBLIC_SELF_ENDPOINT || "",
-      true,
-      AllIds,
-      configStore,
-      "hex"
-    );
 
     const result = await selfBackendVerifier.verify(
       attestationId,
@@ -51,54 +46,36 @@ export async function POST(req: NextRequest) {
       publicSignals,
       userContextData
     );
-    if (!result.isValidDetails.isValid) {
-      return NextResponse.json(
-        {
-          status: "error",
-          result: false,
-          message: "Verification failed",
-          details: result.isValidDetails,
-        },
-        { status: 500 }
-      );
-    }
-
-    const saveOptions = (await configStore.getConfig(
-      result.userData.userIdentifier
-    )) as unknown as SelfAppDisclosureConfig;
 
     if (result.isValidDetails.isValid) {
       return NextResponse.json({
         status: "success",
-        result: result.isValidDetails.isValid,
+        result: true,
         credentialSubject: result.discloseOutput,
-        verificationOptions: {
-          minimumAge: saveOptions.minimumAge,
-          ofac: saveOptions.ofac,
-          excludedCountries: saveOptions.excludedCountries?.map(
-            (countryName) => {
-              const entry = Object.entries(countryCodes).find(
-                ([_, name]) => name === countryName
-              );
-              return entry ? entry[0] : countryName;
-            }
-          ),
-        },
       });
     } else {
-      return NextResponse.json({
-        status: "error",
-        result: result.isValidDetails.isValid,
-        message: "Verification failed",
-        details: result,
-      });
+      //verfication failed
+      return NextResponse.json(
+        {
+          status: "error",
+          result: false,
+          reason: "Verification failed",
+          error_code: "VERIFICATION_FAILED",
+          details: result.isValidDetails,
+        },
+        { status: 200 }
+      );
     }
   } catch (error) {
     console.error("Error verifying proof:", error);
-    return NextResponse.json({
-      status: "error",
-      result: false,
-      message: error instanceof Error ? error.message : "Unknown error",
-    });
+    return NextResponse.json(
+      {
+        status: "error",
+        result: false,
+        reason: error instanceof Error ? error.message : "Unknown error",
+        error_code: "UNKNOWN_ERROR",
+      },
+      { status: 200 }
+    );
   }
 }
