@@ -525,11 +525,7 @@ export default function ReportPetForm() {
     libraries: ["places"],
   });
 
-  // useEffect(() => {
-  //   console.log("Places Status:", status, "Data:", data);
-  // }, [status, data]);
-
-  // if (!isLoaded) return <p>Loading...</p>;
+  console.log("address", address);
 
   return (
     <div className="max-w-xl mx-auto bg-white p-8 rounded-2xl shadow-lg border border-gray-100">

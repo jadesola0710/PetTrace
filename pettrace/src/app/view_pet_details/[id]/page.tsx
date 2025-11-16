@@ -246,7 +246,7 @@ export default function PetDetails() {
   };
 
   const handleClaimBounty = async () => {
-    if (!isConnected || !walletClient) {
+    if (!address || !walletClient) {
       toast.error("Please connect your wallet first");
       return;
     }
@@ -325,7 +325,7 @@ export default function PetDetails() {
   };
 
   const handleCancelBounty = async () => {
-    if (!isConnected || !walletClient) {
+    if (!address || !walletClient) {
       toast.error("Please connect your wallet first");
       return;
     }
@@ -395,7 +395,7 @@ export default function PetDetails() {
       ownerConfirmed: formattedPet.ownerConfirmed,
     });
 
-    if (!isConnected || !walletClient) {
+    if (!address || !walletClient) {
       const errMsg = "Please connect your wallet first";
       setError(errMsg);
       toast.error(errMsg);
@@ -472,6 +472,8 @@ export default function PetDetails() {
     }
   };
 
+  console.log("address", address);
+
   const handleMarkAsFound = async () => {
     console.log("Attempting markAsFound with:", {
       petId,
@@ -481,7 +483,7 @@ export default function PetDetails() {
       finder: formattedPet.finder,
     });
 
-    if (!isConnected || !walletClient) {
+    if (!address || !walletClient) {
       const errMsg = "Please connect your wallet first";
       setError(errMsg);
       toast.error(errMsg);

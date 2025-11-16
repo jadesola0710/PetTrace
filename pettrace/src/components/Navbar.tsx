@@ -35,6 +35,7 @@ export default function Navbar() {
     logoutPrivy();
   };
 
+  console.log("address", address);
   const displayAddress = address || user?.wallet?.address;
 
   return (
