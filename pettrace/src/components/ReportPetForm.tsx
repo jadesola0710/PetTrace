@@ -31,7 +31,7 @@ import {
 import { getUniversalLink } from "@selfxyz/core";
 
 // Contract addresses
-const CONTRACT_ADDRESS = "0xCEAb4FD4C1f488938d81e8B6A519951Eda17a318";
+const CONTRACT_ADDRESS = "0xC7F94703677f5B3fBa1BcF81B1560364849Ce103";
 const CUSD_ADDRESS = "0x765DE816845861e75A25fCA122bb6898B8B1282a";
 const GDOLLAR_ADDRESS = "0x62B8B11039FcfE5aB0C56E502b1C372A3d2a9c7A";
 
@@ -49,9 +49,11 @@ interface PetFormData {
   contactEmail: string;
   ethBounty: string;
   cusdBounty: string;
+  usdtBounty: string;
   gDollarBounty: string;
   useCUSD: boolean;
   useGDOLLAR: boolean;
+  useUSDT: boolean;
 }
 
 // Notification Helper Functions
@@ -212,10 +214,12 @@ export default function ReportPetForm() {
     contactPhone: "",
     contactEmail: "",
     ethBounty: "0.001",
-    cusdBounty: "1",
-    gDollarBounty: "10",
+    cusdBounty: "0.001",
+    gDollarBounty: "0.001",
+    usdtBounty: "0.001",
     useCUSD: false,
     useGDOLLAR: false,
+    useUSDT: false,
   });
 
   const {
@@ -254,11 +258,12 @@ export default function ReportPetForm() {
   };
 
   // Handle currency selection
-  const handleSelectCurrency = (currency: "CELO" | "CUSD" | "G$") => {
+  const handleSelectCurrency = (currency: "CELO" | "CUSD" | "G$" | "USDT") => {
     setFormData((prev) => ({
       ...prev,
       useCUSD: currency === "CUSD",
       useGDOLLAR: currency === "G$",
+      useUSDT: currency === "USDT",
     }));
   };
 
@@ -269,12 +274,13 @@ export default function ReportPetForm() {
       return false;
     }
 
-    if (!isVerified) {
-      showNotification.verificationRequired();
-      return false;
-    }
+    // if (!isVerified) {
+    //   showNotification.verificationRequired();
+    //   return false;
+    // }
 
     // Required fields check
+
     const requiredFields = {
       name: "Pet Name",
       breed: "Breed",
@@ -301,6 +307,8 @@ export default function ReportPetForm() {
       bountyAmount = formData.cusdBounty;
     } else if (formData.useGDOLLAR) {
       bountyAmount = formData.gDollarBounty;
+    } else if (formData.useUSDT) {
+      bountyAmount = formData.usdtBounty;
     } else {
       bountyAmount = formData.ethBounty;
     }
@@ -450,6 +458,128 @@ export default function ReportPetForm() {
   }, []);
 
   // Main pet reporting function
+  // const reportPet = async () => {
+  //   if (!walletClient || !address) {
+  //     showNotification.walletNotConnected();
+  //     return;
+  //   }
+
+  //   try {
+  //     const toastId = showNotification.reportingPet();
+  //     setReportToastId(toastId);
+
+  //     // Upload image
+  //     const imageUrl = await uploadToIPFS(file!);
+  //     const ipfsHash = imageUrl.split("/").pop() || "";
+  //     if (ipfsHash.length > 200) throw new Error("Image URL too long");
+
+  //     // Prepare bounty data
+  //     let bountyAmount = "0";
+  //     let bountyInWei = BigInt(0);
+  //     let currency = "CELO";
+
+  //     if (formData.useCUSD) {
+  //       bountyAmount = formData.cusdBounty;
+  //       bountyInWei = parseEther(bountyAmount);
+  //       currency = "cUSD";
+  //     } else if (formData.useGDOLLAR) {
+  //       bountyAmount = formData.gDollarBounty;
+  //       bountyInWei = parseEther(bountyAmount);
+  //       currency = "G$";
+  //     } else if (formData.useUSDT) {
+  //       bountyAmount = formData.usdtBounty;
+  //       bountyInWei = parseEther(bountyAmount);
+  //       currency = "USDT";
+  //     } else {
+  //       bountyAmount = formData.ethBounty;
+  //       bountyInWei = parseEther(bountyAmount);
+  //     }
+
+  //     // Generate referral tag
+  //     const divviSuffix = getReferralTag(DIVVI_CONFIG);
+  //     console.log("🎯 Divvi Suffix:", divviSuffix);
+
+  //     // Encode contract call
+  //     const encodedFunction = encodeFunctionData({
+  //       abi: PetTraceABI.abi,
+  //       functionName: "postLostPet",
+  //       args: [
+  //         formData.name,
+  //         formData.breed,
+  //         formData.gender,
+  //         Number(formData.sizeCm),
+  //         Number(formData.ageMonths),
+  //         formData.dateTimeLost,
+  //         formData.description,
+  //         ipfsHash,
+  //         formData.lastSeenLocation,
+  //         formData.contactName,
+  //         formData.contactPhone,
+  //         formData.contactEmail,
+  //         formData.useCUSD ? bountyInWei.toString() : "0",
+  //         formData.useGDOLLAR ? bountyInWei.toString() : "0",
+  //         formData.useUSDT ? bountyInWei.toString() : "0",
+  //       ],
+  //     });
+
+  //     console.log("🎯 Encoded Function (before Divvi):", encodedFunction);
+
+  //     const dataWithDivvi = (encodedFunction +
+  //       (divviSuffix.startsWith("0x")
+  //         ? divviSuffix.slice(2)
+  //         : divviSuffix)) as `0x${string}`;
+
+  //     console.log("🎯 Data with Divvi (after):", dataWithDivvi);
+  //     console.log(
+  //       "🎯 Divvi added:",
+  //       dataWithDivvi.length > encodedFunction.length
+  //     );
+
+  //     // Send transaction
+  //     const hash = await walletClient.sendTransaction({
+  //       account: address,
+  //       to: CONTRACT_ADDRESS,
+  //       data: dataWithDivvi,
+  //       value:
+  //         formData.useCUSD || formData.useGDOLLAR || formData.useUSDT
+  //           ? BigInt(0)
+  //           : bountyInWei,
+  //     });
+
+  //     setReportHash(hash as `0x${string}`);
+
+  //     // ✅ Log referral submission
+  //     console.log("🎯 Submitting referral with:", {
+  //       txHash: hash,
+  //       chainId: chainId || 42220,
+  //     });
+
+  //     const referralResult = await submitReferral({
+  //       txHash: hash,
+  //       chainId: chainId || 42220,
+  //     });
+
+  //     console.log("✅ Referral Submission SUCCESS:", {
+  //       result: referralResult,
+  //       txHash: hash,
+  //       timestamp: new Date().toISOString(),
+  //     });
+
+  //     return hash;
+  //   } catch (error) {
+  //     console.error("❌ Report pet error:", error);
+
+  //     if (reportToastId) {
+  //       toast.dismiss(reportToastId);
+  //     }
+  //     showNotification.transactionFailed();
+  //     setReportToastId(null);
+  //     throw error;
+  //   }
+  // };
+
+  // Add this to your reportPet function in ReportPetForm.tsx
+
   const reportPet = async () => {
     if (!walletClient || !address) {
       showNotification.walletNotConnected();
@@ -459,6 +589,10 @@ export default function ReportPetForm() {
     try {
       const toastId = showNotification.reportingPet();
       setReportToastId(toastId);
+
+      console.log("=== DIVVI INTEGRATION START ===");
+      console.log("📍 User Address:", address);
+      console.log("📍 Consumer Address:", DIVVI_CONFIG.consumer);
 
       // Upload image
       const imageUrl = await uploadToIPFS(file!);
@@ -478,13 +612,31 @@ export default function ReportPetForm() {
         bountyAmount = formData.gDollarBounty;
         bountyInWei = parseEther(bountyAmount);
         currency = "G$";
+      } else if (formData.useUSDT) {
+        bountyAmount = formData.usdtBounty;
+        bountyInWei = parseEther(bountyAmount);
+        currency = "USDT";
       } else {
         bountyAmount = formData.ethBounty;
         bountyInWei = parseEther(bountyAmount);
       }
 
+      console.log("💰 Bounty Details:", {
+        amount: bountyAmount,
+        currency,
+        inWei: bountyInWei.toString(),
+      });
+
       // Generate referral tag
+      console.log("🎯 Generating Divvi referral tag...");
       const divviSuffix = getReferralTag(DIVVI_CONFIG);
+
+      console.log("✅ Divvi Suffix Generated:", {
+        suffix: divviSuffix,
+        length: divviSuffix.length,
+        hasPrefix: divviSuffix.startsWith("0x"),
+        raw: divviSuffix,
+      });
 
       // Encode contract call
       const encodedFunction = encodeFunctionData({
@@ -505,33 +657,101 @@ export default function ReportPetForm() {
           formData.contactEmail,
           formData.useCUSD ? bountyInWei.toString() : "0",
           formData.useGDOLLAR ? bountyInWei.toString() : "0",
+          formData.useUSDT ? bountyInWei.toString() : "0",
         ],
       });
 
+      console.log("📦 Encoded Function (BEFORE Divvi):", {
+        data: encodedFunction,
+        length: encodedFunction.length,
+      });
+
+      // Append Divvi suffix
       const dataWithDivvi = (encodedFunction +
         (divviSuffix.startsWith("0x")
           ? divviSuffix.slice(2)
           : divviSuffix)) as `0x${string}`;
 
+      console.log("📦 Data WITH Divvi (AFTER):", {
+        data: dataWithDivvi,
+        length: dataWithDivvi.length,
+        divviAdded: dataWithDivvi.length > encodedFunction.length,
+        difference: dataWithDivvi.length - encodedFunction.length,
+      });
+
+      console.log("🔍 Divvi Integration Check:", {
+        originalLength: encodedFunction.length,
+        withDivviLength: dataWithDivvi.length,
+        divviSuffixLength: divviSuffix.length,
+        success: dataWithDivvi.length > encodedFunction.length,
+      });
+
       // Send transaction
+      console.log("📡 Sending transaction to blockchain...");
       const hash = await walletClient.sendTransaction({
         account: address,
         to: CONTRACT_ADDRESS,
         data: dataWithDivvi,
         value:
-          formData.useCUSD || formData.useGDOLLAR ? BigInt(0) : bountyInWei,
+          formData.useCUSD || formData.useGDOLLAR || formData.useUSDT
+            ? BigInt(0)
+            : bountyInWei,
       });
 
+      console.log("✅ Transaction Hash:", hash);
       setReportHash(hash as `0x${string}`);
 
       // Submit referral
-      await submitReferral({
+      console.log("🎯 Submitting referral to Divvi...");
+      console.log("Referral Params:", {
         txHash: hash,
         chainId: chainId || 42220,
       });
 
+      try {
+        const referralResult = await submitReferral({
+          txHash: hash,
+          chainId: chainId || 42220,
+        });
+
+        console.log("✅ Referral Submission SUCCESS:", {
+          result: referralResult,
+          txHash: hash,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Show success toast
+        toast.success("Divvi referral submitted successfully!", {
+          duration: 3000,
+          icon: "🎉",
+        });
+      } catch (referralError) {
+        console.error("❌ Referral Submission FAILED:", {
+          error: referralError,
+          message:
+            referralError instanceof Error
+              ? referralError.message
+              : "Unknown error",
+          txHash: hash,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Show warning toast (don't fail the whole transaction)
+        toast.error("Transaction successful, but referral submission failed", {
+          duration: 4000,
+          icon: "⚠️",
+        });
+      }
+
+      console.log("=== DIVVI INTEGRATION END ===");
       return hash;
     } catch (error) {
+      console.error("❌ Report Pet Error:", {
+        error,
+        message: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+
       if (reportToastId) {
         toast.dismiss(reportToastId);
       }
@@ -540,6 +760,32 @@ export default function ReportPetForm() {
       throw error;
     }
   };
+
+  // Optional: Add a debug component to monitor Divvi status
+  // Add this to your component's return JSX if you want real-time status
+
+  {
+    /* Debug Panel (Remove in production) */
+  }
+  {
+    process.env.NODE_ENV === "development" && (
+      <div className="mb-4 p-4 bg-gray-100 rounded-lg">
+        <h4 className="font-bold mb-2">Divvi Debug Info</h4>
+        <pre className="text-xs overflow-auto">
+          {JSON.stringify(
+            {
+              user: address,
+              consumer: DIVVI_CONFIG.consumer,
+              chainId: chainId || 42220,
+              reportHash: reportHash || "Not yet submitted",
+            },
+            null,
+            2
+          )}
+        </pre>
+      </div>
+    );
+  }
 
   // Form submission handler
   const handleSubmit = async (e: React.FormEvent) => {
@@ -558,6 +804,10 @@ export default function ReportPetForm() {
         await approveToken(GDOLLAR_ADDRESS, formData.gDollarBounty, "G$");
         return;
       }
+      if (formData.useUSDT) {
+        await approveToken(GDOLLAR_ADDRESS, formData.gDollarBounty, "G$");
+        return;
+      }
 
       await reportPet();
     } catch (error) {
@@ -568,7 +818,10 @@ export default function ReportPetForm() {
 
   // Handle approval confirmation
   useEffect(() => {
-    if (isApprovalConfirmed && (formData.useCUSD || formData.useGDOLLAR)) {
+    if (
+      isApprovalConfirmed &&
+      (formData.useCUSD || formData.useGDOLLAR || formData.useUSDT)
+    ) {
       if (approvalToastId) {
         toast.dismiss(approvalToastId);
         setApprovalToastId(null);
@@ -582,7 +835,12 @@ export default function ReportPetForm() {
         reportPet();
       }, 1000);
     }
-  }, [isApprovalConfirmed, formData.useCUSD, formData.useGDOLLAR]);
+  }, [
+    isApprovalConfirmed,
+    formData.useCUSD,
+    formData.useGDOLLAR,
+    formData.useUSDT,
+  ]);
 
   // Handle successful report
   useEffect(() => {
@@ -608,10 +866,12 @@ export default function ReportPetForm() {
         contactPhone: "",
         contactEmail: "",
         ethBounty: "0.001",
-        cusdBounty: "1",
-        gDollarBounty: "10",
+        cusdBounty: "0.001",
+        gDollarBounty: "0.001",
+        usdtBounty: "0.001",
         useCUSD: false,
         useGDOLLAR: false,
+        useUSDT: false,
       });
       setFile(null);
       setPreview(null);
@@ -1019,13 +1279,29 @@ export default function ReportPetForm() {
             >
               Pay with G$
             </button>
+
+            <button
+              type="button"
+              onClick={() => handleSelectCurrency("USDT")}
+              className={`px-4 py-2 rounded-lg ${
+                formData.useUSDT ? "bg-yellow-600 text-white" : "bg-gray-200"
+              }`}
+            >
+              Pay with USDT
+            </button>
           </div>
 
           {/* Bounty Amount Input */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Reward Amount (
-              {formData.useCUSD ? "cUSD" : formData.useGDOLLAR ? "G$" : "CELO"}
+              {formData.useCUSD
+                ? "cUSD"
+                : formData.useGDOLLAR
+                ? "G$"
+                : formData.useUSDT
+                ? "USDT"
+                : "CELO"}
               )*
             </label>
             <div className="relative">
@@ -1036,6 +1312,8 @@ export default function ReportPetForm() {
                     ? "cusdBounty"
                     : formData.useGDOLLAR
                     ? "gDollarBounty"
+                    : formData.useUSDT
+                    ? "usdtBounty"
                     : "ethBounty"
                 }
                 value={
@@ -1043,6 +1321,8 @@ export default function ReportPetForm() {
                     ? formData.cusdBounty
                     : formData.useGDOLLAR
                     ? formData.gDollarBounty
+                    : formData.useUSDT
+                    ? formData.usdtBounty
                     : formData.ethBounty
                 }
                 onChange={handleChange}
@@ -1056,6 +1336,8 @@ export default function ReportPetForm() {
                   ? "cUSD"
                   : formData.useGDOLLAR
                   ? "G$"
+                  : formData.useUSDT
+                  ? "USDT"
                   : "CELO"}
               </span>
             </div>
@@ -1064,7 +1346,7 @@ export default function ReportPetForm() {
 
         <button
           type="submit"
-          disabled={isLoading || !isVerified}
+          // disabled={isLoading || !isVerified}
           className={`w-full py-3 mt-4 rounded-xl font-semibold transition ${
             isLoading || !isVerified
               ? "bg-gray-300 text-gray-600 cursor-not-allowed"

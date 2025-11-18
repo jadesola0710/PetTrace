@@ -27,7 +27,7 @@ import { createPublicClient, http } from "viem";
 import { celo } from "viem/chains";
 
 // Updated to Celo contract address
-const CONTRACT_ADDRESS = "0xCEAb4FD4C1f488938d81e8B6A519951Eda17a318";
+const CONTRACT_ADDRESS = "0xC7F94703677f5B3fBa1BcF81B1560364849Ce103";
 
 interface Pet {
   id: number;

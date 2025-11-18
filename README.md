@@ -119,7 +119,7 @@ Deployed to **Celo mainnet**:
 
 | Contract | Address (Mainnet)                            |
 | -------- | -------------------------------------------- |
-| PetTrace | `0xCEAb4FD4C1f488938d81e8B6A519951Eda17a318` |
+| PetTrace | `0xC7F94703677f5B3fBa1BcF81B1560364849Ce103` |
 
 ---
 
