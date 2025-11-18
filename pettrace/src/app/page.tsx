@@ -87,8 +87,10 @@ export default function Home() {
     <main className="p-4 md:p-8 bg-gray-50 min-h-screen">
       <HeroBanner />
 
+      <HelpSearchSection />
+
       {/* Lost Pets Section */}
-      <section className="max-w-7xl mx-auto mt-12">
+      <section className="max-w-7xl  mt-12">
         <h2 className="text-2xl font-bold text-gray-800 mb-6">
           Recently Lost Pets
         </h2>
@@ -108,7 +110,6 @@ export default function Home() {
           </div>
         )}
       </section>
-      <HelpSearchSection />
     </main>
   );
 }

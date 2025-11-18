@@ -54,6 +54,133 @@ interface PetFormData {
   useGDOLLAR: boolean;
 }
 
+// Notification Helper Functions
+const showNotification = {
+  // Connection & Network
+  walletNotConnected: () => {
+    toast.error("Please connect your wallet to continue", {
+      duration: 4000,
+      icon: "🔌",
+    });
+  },
+
+  wrongNetwork: () => {
+    toast.error("Please switch to Celo network", {
+      duration: 5000,
+      icon: "🌐",
+    });
+  },
+
+  // Verification
+  verificationSuccess: () => {
+    toast.success("Identity verified successfully!", {
+      duration: 3000,
+      icon: "✅",
+    });
+  },
+
+  verificationError: () => {
+    toast.error("Failed to verify identity. Please try again.", {
+      duration: 4000,
+      icon: "❌",
+    });
+  },
+
+  verificationRequired: () => {
+    toast.error("Please complete identity verification first", {
+      duration: 4000,
+      icon: "🔒",
+    });
+  },
+
+  // File Upload
+  fileUploadSuccess: () => {
+    toast.success("Image uploaded successfully", {
+      duration: 2000,
+      icon: "📸",
+    });
+  },
+
+  fileValidationError: (error: string) => {
+    toast.error(error, {
+      duration: 4000,
+      icon: "⚠️",
+    });
+  },
+
+  // Transaction Progress
+  approvingToken: (tokenName: string) => {
+    return toast.loading(`Approving ${tokenName} spending...`, {
+      icon: "⏳",
+    });
+  },
+
+  approvalSuccess: (tokenName: string) => {
+    toast.success(`${tokenName} approval confirmed!`, {
+      duration: 3000,
+      icon: "✓",
+    });
+  },
+
+  reportingPet: () => {
+    return toast.loading("Reporting lost pet to blockchain...", {
+      icon: "📡",
+    });
+  },
+
+  uploadingToIPFS: () => {
+    return toast.loading("Uploading image to IPFS...", {
+      icon: "☁️",
+    });
+  },
+
+  // Success
+  reportSuccess: () => {
+    toast.success("Pet reported successfully! Redirecting to reports page...", {
+      duration: 4000,
+      icon: "🎉",
+    });
+  },
+
+  // Errors
+  transactionFailed: (error?: string) => {
+    toast.error(error || "Transaction failed. Please try again.", {
+      duration: 5000,
+      icon: "❌",
+    });
+  },
+
+  ipfsUploadFailed: () => {
+    toast.error("Failed to upload image. Please try again.", {
+      duration: 4000,
+      icon: "☁️",
+    });
+  },
+
+  // Form Validation
+  missingField: (fieldName: string) => {
+    toast.error(`Please fill in ${fieldName}`, {
+      duration: 3000,
+      icon: "📝",
+    });
+  },
+
+  invalidBounty: () => {
+    toast.error("Please enter a valid bounty amount greater than 0", {
+      duration: 3000,
+      icon: "💰",
+    });
+  },
+
+  // Welcome
+  welcome: () => {
+    toast("Please connect your wallet to report a lost pet", {
+      icon: "👋",
+      duration: 4000,
+    });
+  },
+};
+
 export default function ReportPetForm() {
   const router = useRouter();
   const { address, chainId } = useAccount();
@@ -71,10 +198,6 @@ export default function ReportPetForm() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [universalLink, setUniversalLink] = useState("");
-  const [showToast, setShowToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState("");
-  const [linkCopied, setLinkCopied] = useState(false);
 
   const [formData, setFormData] = useState<PetFormData>({
     name: "",
@@ -90,7 +213,7 @@ export default function ReportPetForm() {
     contactEmail: "",
     ethBounty: "0.001",
     cusdBounty: "1",
-    gDollarBounty: "10", // Default G$ bounty
+    gDollarBounty: "10",
     useCUSD: false,
     useGDOLLAR: false,
   });
@@ -120,11 +243,6 @@ export default function ReportPetForm() {
     consumer: "0x124D8fad33E0b9fe9F3e1E90D0fC0055aBE8cA8d" as `0x${string}`,
   };
 
-  // Check network
-  useEffect(() => {
-    setIsCorrectNetwork(chainId === celo.id);
-  }, [chainId]);
-
   // Handle form changes
   const handleChange = (
     e: React.ChangeEvent<
@@ -147,34 +265,32 @@ export default function ReportPetForm() {
   // Form validation
   const validateForm = () => {
     if (!address) {
-      toast.error("Please connect your wallet");
+      showNotification.walletNotConnected();
       return false;
     }
 
-    if (!isCorrectNetwork) {
-      toast.error("Please switch to Celo network");
+    if (!isVerified) {
+      showNotification.verificationRequired();
       return false;
     }
 
     // Required fields check
-    const requiredFields = [
-      "name",
-      "breed",
-      "gender",
-      "sizeCm",
-      "ageMonths",
-      "dateTimeLost",
-      "description",
-      "lastSeenLocation",
-      "contactName",
-      "contactPhone",
-    ];
+    const requiredFields = {
+      name: "Pet Name",
+      breed: "Breed",
+      gender: "Gender",
+      sizeCm: "Size",
+      ageMonths: "Age",
+      dateTimeLost: "Date/Time Lost",
+      description: "Description",
+      lastSeenLocation: "Last Seen Location",
+      contactName: "Contact Name",
+      contactPhone: "Contact Phone",
+    };
 
-    for (const field of requiredFields) {
+    for (const [field, label] of Object.entries(requiredFields)) {
       if (!formData[field as keyof PetFormData]) {
-        toast.error(
-          `Please fill in ${field.replace(/([A-Z])/g, " $1").toLowerCase()}`
-        );
+        showNotification.missingField(label);
         return false;
       }
     }
@@ -189,18 +305,13 @@ export default function ReportPetForm() {
       bountyAmount = formData.ethBounty;
     }
 
-    if (isNaN(parseFloat(bountyAmount))) {
-      toast.error("Please enter a valid bounty amount");
-      return false;
-    }
-
-    if (parseFloat(bountyAmount) <= 0) {
-      toast.error("Bounty amount must be greater than 0");
+    if (isNaN(parseFloat(bountyAmount)) || parseFloat(bountyAmount) <= 0) {
+      showNotification.invalidBounty();
       return false;
     }
 
     if (!file) {
-      toast.error("Please upload a pet image");
+      showNotification.fileValidationError("Please upload a pet image");
       return false;
     }
 
@@ -214,13 +325,13 @@ export default function ReportPetForm() {
     tokenName: string
   ) => {
     if (!walletClient || !address) {
-      toast.error("Wallet not connected");
+      showNotification.walletNotConnected();
       return;
     }
 
     try {
       const amountInWei = parseEther(amount);
-      const toastId = toast.loading(`Approving ${tokenName} spending...`);
+      const toastId = showNotification.approvingToken(tokenName);
       setApprovalToastId(toastId);
 
       const approvalData = encodeFunctionData({
@@ -238,7 +349,10 @@ export default function ReportPetForm() {
       setApprovalHash(hash as `0x${string}`);
       return hash;
     } catch (error) {
-      toast.error(`Failed to approve ${tokenName} spending`);
+      showNotification.transactionFailed(`Failed to approve ${tokenName}`);
+      if (approvalToastId) {
+        toast.dismiss(approvalToastId);
+      }
       setApprovalToastId(null);
       throw error;
     }
@@ -260,48 +374,65 @@ export default function ReportPetForm() {
     if (!selectedFile) return;
 
     if (!selectedFile.type.startsWith("image/")) {
-      setError("Only image files are allowed");
+      const errorMsg = "Only image files are allowed";
+      setError(errorMsg);
+      showNotification.fileValidationError(errorMsg);
       return;
     }
 
     if (selectedFile.size > 10 * 1024 * 1024) {
-      setError("File size must be less than 10MB");
+      const errorMsg = "File size must be less than 10MB";
+      setError(errorMsg);
+      showNotification.fileValidationError(errorMsg);
       return;
     }
 
     setFile(selectedFile);
     const reader = new FileReader();
-    reader.onload = () => setPreview(reader.result as string);
+    reader.onload = () => {
+      setPreview(reader.result as string);
+      showNotification.fileUploadSuccess();
+    };
     reader.readAsDataURL(selectedFile);
   };
 
   // IPFS upload
   const uploadToIPFS = async (file: File): Promise<string> => {
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append(
-      "pinataMetadata",
-      JSON.stringify({
-        name: `pettrace-image-${Date.now()}`,
-      })
-    );
+    const uploadToastId = showNotification.uploadingToIPFS();
 
-    const response = await axios.post(
-      "https://api.pinata.cloud/pinning/pinFileToIPFS",
-      formData,
-      {
-        headers: {
-          "Content-Type": "multipart/form-data",
-          Authorization: `Bearer ${process.env.NEXT_PUBLIC_PINATA_JWT}`,
-        },
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append(
+        "pinataMetadata",
+        JSON.stringify({
+          name: `pettrace-image-${Date.now()}`,
+        })
+      );
+
+      const response = await axios.post(
+        "https://api.pinata.cloud/pinning/pinFileToIPFS",
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            Authorization: `Bearer ${process.env.NEXT_PUBLIC_PINATA_JWT}`,
+          },
+        }
+      );
+
+      toast.dismiss(uploadToastId);
+
+      if (response.status !== 200) {
+        throw new Error("Failed to upload image");
       }
-    );
 
-    if (response.status !== 200) {
-      throw new Error("Failed to upload image");
+      return `https://gateway.pinata.cloud/ipfs/${response.data.IpfsHash}`;
+    } catch (error) {
+      toast.dismiss(uploadToastId);
+      showNotification.ipfsUploadFailed();
+      throw error;
     }
-
-    return `https://gateway.pinata.cloud/ipfs/${response.data.IpfsHash}`;
   };
 
   // Drag and drop handlers
@@ -321,12 +452,12 @@ export default function ReportPetForm() {
   // Main pet reporting function
   const reportPet = async () => {
     if (!walletClient || !address) {
-      toast.error("Wallet not connected");
+      showNotification.walletNotConnected();
       return;
     }
 
     try {
-      const toastId = toast.loading("Reporting lost pet...");
+      const toastId = showNotification.reportingPet();
       setReportToastId(toastId);
 
       // Upload image
@@ -401,7 +532,10 @@ export default function ReportPetForm() {
 
       return hash;
     } catch (error) {
-      toast.error("Failed to report pet");
+      if (reportToastId) {
+        toast.dismiss(reportToastId);
+      }
+      showNotification.transactionFailed();
       setReportToastId(null);
       throw error;
     }
@@ -427,7 +561,7 @@ export default function ReportPetForm() {
 
       await reportPet();
     } catch (error) {
-      toast.error("Failed to submit pet report");
+      showNotification.transactionFailed("Failed to submit pet report");
       setIsSubmitting(false);
     }
   };
@@ -440,9 +574,13 @@ export default function ReportPetForm() {
         setApprovalToastId(null);
       }
 
-      const toastId = toast.loading("Reporting lost pet after approval...");
-      setReportToastId(toastId);
-      reportPet();
+      const tokenName = formData.useCUSD ? "cUSD" : "G$";
+      showNotification.approvalSuccess(tokenName);
+
+      // Small delay to show approval success before reporting
+      setTimeout(() => {
+        reportPet();
+      }, 1000);
     }
   }, [isApprovalConfirmed, formData.useCUSD, formData.useGDOLLAR]);
 
@@ -454,7 +592,7 @@ export default function ReportPetForm() {
         setReportToastId(null);
       }
 
-      toast.success("Pet reported successfully!");
+      showNotification.reportSuccess();
 
       // Reset form
       setFormData({
@@ -475,11 +613,15 @@ export default function ReportPetForm() {
         useCUSD: false,
         useGDOLLAR: false,
       });
+      setFile(null);
+      setPreview(null);
+      setIsVerified(false);
 
-      setTimeout(() => router.push("/view_reports"), 1500);
+      setTimeout(() => router.push("/view_reports"), 2000);
     }
   }, [isReportConfirmed, router]);
 
+  // Initialize Self app
   useEffect(() => {
     if (!address) return;
 
@@ -503,20 +645,13 @@ export default function ReportPetForm() {
         }).build();
 
         setSelfApp(app);
-        // setUniversalLink(getUniversalLink(app));
       } catch (error) {
         console.error("Failed to initialize Self app:", error);
       }
     };
 
     initializeSelfApp();
-  }, [address]); // Make sure address is in the dependency array
-
-  const displayToast = (message: string) => {
-    setToastMessage(message);
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 3000);
-  };
+  }, [address]);
 
   const isLoading = isSubmitting || !!approvalHash || !!reportHash;
 
@@ -524,8 +659,6 @@ export default function ReportPetForm() {
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY as string,
     libraries: ["places"],
   });
-
-  console.log("address", address);
 
   return (
     <div className="max-w-xl mx-auto bg-white p-8 rounded-2xl shadow-lg border border-gray-100">
@@ -547,10 +680,10 @@ export default function ReportPetForm() {
               selfApp={selfApp}
               onSuccess={() => {
                 setIsVerified(true);
-                toast.success("Identity verified successfully!");
+                showNotification.verificationSuccess();
               }}
               onError={() => {
-                displayToast("Error: Failed to verify identity");
+                showNotification.verificationError();
               }}
               size={150}
             />
@@ -569,8 +702,6 @@ export default function ReportPetForm() {
       </div>
 
       <form className="space-y-6" onSubmit={handleSubmit}>
-        {/* Form fields remain the same as before */}
-
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2">
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -675,7 +806,7 @@ export default function ReportPetForm() {
                 name="lastSeenLocation"
                 value={formData.lastSeenLocation}
                 onChange={(e) => {
-                  setValue(e.target.value); // update places hook
+                  setValue(e.target.value);
                   setFormData({
                     ...formData,
                     lastSeenLocation: e.target.value,
@@ -708,7 +839,6 @@ export default function ReportPetForm() {
                             lastSeenLocation: description,
                           });
 
-                          // Optionally get lat/lng for map usage
                           getGeocode({ address: description }).then(
                             (results) => {
                               const { lat, lng } = getLatLng(results[0]);
@@ -791,7 +921,7 @@ export default function ReportPetForm() {
               </div>
             </div>
 
-            {/* Single Preview Section */}
+            {/* Preview Section */}
             {preview && (
               <div className="mt-4">
                 <img
@@ -921,7 +1051,7 @@ export default function ReportPetForm() {
                 step="0.001"
                 required
               />
-              <span className="absolute left-3 top-2 text-gray-500">
+              <span className="absolute right-3 top-3 text-gray-500 text-sm">
                 {formData.useCUSD
                   ? "cUSD"
                   : formData.useGDOLLAR
@@ -947,17 +1077,6 @@ export default function ReportPetForm() {
             ? "Complete Verification First"
             : "Report Lost Pet"}
         </button>
-
-        {/* <button
-          type="submit"
-          className={`w-full py-3 mt-4 rounded-xl font-semibold transition ${
-            isLoading || !isVerified
-              ? "bg-gray-300 text-gray-600 cursor-not-allowed"
-              : "bg-yellow-600 text-white hover:bg-yellow-700"
-          }`}
-        >
-          Report
-        </button> */}
       </form>
     </div>
   );

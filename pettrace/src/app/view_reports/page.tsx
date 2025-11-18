@@ -82,9 +82,9 @@ export default function ReportPage() {
     );
 
   return (
-    <main className="container mx-auto py-8">
+    <main className="py-8">
       {/* Lost Pets Section */}
-      <section className="max-w-7xl mx-auto mt-12">
+      <section className="max-w-7xl  mt-10 px-5">
         <h2 className="text-2xl font-bold text-gray-800 mb-6">
           Recently Lost Pets
         </h2>
